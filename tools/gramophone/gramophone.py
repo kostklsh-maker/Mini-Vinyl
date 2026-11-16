@@ -26,29 +26,39 @@ P = dict(
     pn532=(43.0, 41.0, 4.5),  # плата PN532 V3: длина, ширина, высота с деталями
     ring_od=66.0, ring_id=52.0, ring_pcb=1.6,   # кольцо WS2812B на 24 диода
     # --- звук ---
-    spk_d=40.0,               # динамики Ø40 (2 боковых + 1 под трубой)
+    spk_d=40.0, spk_rim=3.0, spk_depth=19.0, spk_magnet=22.0,   # динамики Ø40 (2 боковых + 1 под трубой)
     # --- платы на основании ---
     esp=(28.3, 51.6),         # ESP32 DevKit 30 pin: ширина, длина
+    amp=(18.0, 19.0),         # MAX98357A: ширина (вдоль гребёнки), длина
+    dac=(17.5, 32.0),         # GY-PCM5102: ширина, длина (гнездо 3,5 мм на торце)
+    sd=(24.0, 42.0),          # модуль microSD: ширина, длина (щель карты на торце)
+    enc=(12.5, 13.5, 7.0),    # корпус энкодера EC11
 )
 
 # ------------------------------------------------------------------ геометрия корпуса
-HB = 75.0                    # полуширина коробки стенок (150 × 150)
-NOTCH = 13.0                 # угловая ниша под балясину
+HB = 64.0                    # полуширина коробки стенок (128 × 128)
+NOTCH = 12.0                 # угловая ниша под балясину
 Z_FLOOR, Z_PL, Z_W1, Z_DECK, Z_TOP = 10.4, 18.0, 82.0, 89.0, 92.0   # пол, верх основания, низ карниза, низ и верх деки
-C = np.array([-14.0, -8.0])  # центр диска (пластинка, свет, PN532)
-H = np.array([44.0, 48.0])   # ось трубы граммофона и третьего динамика
+C = np.array([-13.0, -11.0])  # центр диска (пластинка, свет, PN532)
+H = np.array([33.0, 36.0])   # ось трубы граммофона и третьего динамика
 SPK_Z = 50.0                 # высота центров боковых динамиков
-BOSS = [(-40.0, -69.6), (40.0, -69.6), (-38.0, 69.6), (8.0, 69.6)]   # стойки под винты основания
+BOSS = [(-58.6, -46.0), (58.6, -46.0), (-58.6, 46.0), (58.6, 46.0)]   # стойки под винты основания
 EARS = [90.0, 210.0, 330.0]  # ушки светового стакана
 EAR_R = 43.5
-ESP_X, DAC_X, SD_X, ENC_X = -14.0, 30.0, 50.0, -50.0                 # разъёмы на задней стенке
-USB_Z, AUX_Z, SD_Z, ENC_Z = 25.4, 30.0, 29.0, 42.0
-PLAT_R, PLAT_T = 55.0, 4.0   # диск-платтер
-RISER_L = 80.0               # высота стойки трубы над декой
-BELL_L, BELL_R = 105.0, 75.0 # раструб: длина и радиус устья
+ESP_X, DAC_X, SD_X, ENC_X = -17.0, 10.0, 35.0, -42.0                 # разъёмы на задней стенке
+USB_Z, AUX_Z, SD_Z, ENC_Z = 25.4, 30.0, 29.0, 44.0
+PLAT_R, PLAT_T = 46.0, 4.0   # диск-платтер
+RISER_L = 70.0               # высота стойки трубы над декой
+BELL_L, BELL_R = 92.0, 62.0 # раструб: длина и радиус устья
 TUBE_R, BORE_R, SPIG_R, SPIG_L = 15.0, 11.0, 13.0, 8.0
 BEND_R, BEND_A = 40.0, 45.0
 D_DIR = np.array([-1.0, -1.0, 0.0]) / math.sqrt(2)   # куда наклонён раструб
+WIN = HB - P["wall"]         # внутренняя грань стенки
+COLP = HB - NOTCH + 6.6      # центр балясины
+GR_R, GR_T = 26.0, 2.2       # труба решётки: радиус и длина сквозь стенку
+SCR_R = 23.15                # окружность винтов решётки
+HORN_EARS = [135.0, 315.0]   # ушки прижима динамика трубы
+AMP_Y = -52.0                # передний край отсека усилителей
 
 
 # ------------------------------------------------------------------ помощники
@@ -134,7 +144,7 @@ def make_body():
     """Корпус: четыре стенки и верхняя дека одной деталью. Печатается декой вниз."""
     o = outline()
     inner = o.offset(-P["wall"], JoinType.Miter)
-    cap = tiers([(Z_W1, 77.5), (84.0, 77.5), (85.5, 80.0), (87.0, 80.0), (88.5, 83.0), (91.4, 83.0), (Z_TOP, 82.4)], 10.5)
+    cap = tiers([(Z_W1, HB + 2.5), (84.0, HB + 2.5), (85.5, HB + 5), (87.0, HB + 5), (88.5, HB + 8), (91.4, HB + 8), (Z_TOP, HB + 7.4)], 9.0)
     m = ext(o, Z_PL, Z_W1 + 0.5) + cap
     m -= ext(inner, Z_PL - 1, Z_DECK)
     # стойки под винты основания
@@ -152,19 +162,23 @@ def make_body():
     # гнездо третьего динамика и горло трубы
     hx, hy = H
     rs = P["spk_d"] / 2 + 0.3
-    m += cyl(rs + 2.7, 77.0, Z_DECK + 0.5, hx, hy)
+    m += cyl(rs + 2.5, 77.0, Z_DECK + 0.5, hx, hy) ^ ext(o, 70.0, Z_TOP)
+    for a in HORN_EARS:
+        ex, ey = hx + 26.5 * math.cos(math.radians(a)), hy + 26.5 * math.sin(math.radians(a))
+        m += cyl(4.5, 77.0, Z_DECK + 0.5, ex, ey)
+        m -= cyl(1.3, 76.0, 87.0, ex, ey)
     m -= cyl(rs, 76.0, 83.2, hx, hy)
     m -= cyl(rs - 1.3, 83.15, Z_DECK + 0.01, hx, hy, r2=SPIG_R + P["fit"])
     m -= cyl(SPIG_R + P["fit"], Z_DECK, Z_TOP + 1, hx, hy)
     # боковые динамики
-    hole = teardrop(P["spk_d"] / 2 + 3.3).translate([0, SPK_Z])
+    hole = teardrop(GR_R + 0.3).translate([0, SPK_Z])
     m -= prism_x(hole, HB - P["wall"] - 1, HB + 1)
     m -= prism_x(hole, -HB - 1, -HB + P["wall"] + 1)
     # лицо: декоративные прорези и углубление под шильдик
-    vents = [lens(8, 17, -x * 1.1).translate([x, 67 - abs(x) * 0.12]) for x in (-30, -15, 0, 15, 30)]
+    vents = [lens(7, 15, -x * 1.2).translate([x, 66 - abs(x) * 0.12]) for x in (-24, -12, 0, 12, 24)]
     for v in vents:
         m -= prism_y(v, -HB - 1, -HB + P["wall"] + 1)
-    m -= prism_y(rrect(35.2, 15.2, 3).translate([0, 38]), -HB - 1, -HB + 0.6)
+    m -= prism_y(rrect(30.2, 13.2, 3).translate([0, 37]), -HB - 1, -HB + 0.6)
     # задняя стенка: USB-C, AUX, microSD, ручка громкости (u = −x)
     m -= prism_y(rrect(7.0, 4.5, 2).translate([-ESP_X, USB_Z]), HB - P["wall"] - 1, HB + 1)
     m -= prism_y(CrossSection.circle(3.5).translate([-DAC_X, AUX_Z]), HB - P["wall"] - 1, HB + 1)
@@ -173,34 +187,103 @@ def make_body():
     return m
 
 def make_base():
-    """Основание: поддон с карнизом, стойками под винты и ложементами плат."""
+    """Основание: поддон с карнизом, стойками под винты и ложементами всех плат."""
     o = outline()
     inner = o.offset(-P["wall"], JoinType.Miter)
     pocket = inner.offset(-2.3, JoinType.Miter)
-    m = tiers([(8.0, 83.4), (8.6, 84.0), (11.0, 84.0), (12.0, 82.0), (14.5, 82.0), (15.5, 79.0), (Z_PL, 79.0)], 12.0)
+    m = tiers([(8.0, HB + 8.4), (8.6, HB + 9), (11.0, HB + 9), (12.0, HB + 7), (14.5, HB + 7), (15.5, HB + 4.5), (Z_PL, HB + 4.5)], 11.0)
     m -= ext(pocket, Z_FLOOR, Z_PL + 1)
     lip = ext(inner.offset(-P["fit"], JoinType.Miter) - inner.offset(-P["fit"] - 2.0, JoinType.Miter), Z_PL - 0.5, Z_PL + 3)
     for x, y in BOSS:
         lip -= cyl(5.2, Z_PL - 1, Z_PL + 4, x, y)
     m += lip
-    # ложемент ESP32: плата лежит деталями вниз, штырями вверх, USB — в заднюю стенку
+    y1 = WIN - 0.5                                   # задний торец плат у стенки
+    # --- ESP32: плата лежит деталями вниз, штырями вверх, USB — в заднюю стенку
     ew, el = P["esp"]
-    y1 = HB - P["wall"] - 0.5                       # задний торец платы
-    y0 = y1 - el - 0.3
-    zl = USB_Z + 1.6                                # опорная полка платы
-    fr = box(ESP_X - ew / 2 - 2.2, y0 - 2, Z_FLOOR - 0.1, ESP_X + ew / 2 + 2.2, y1, zl + 3.0)
-    fr -= box(ESP_X - ew / 2 - 0.2, y0, zl, ESP_X + ew / 2 + 0.2, y1 + 1, zl + 4)
-    fr -= box(ESP_X - ew / 2 + 1.5, y0 + 1.5, Z_FLOOR, ESP_X + ew / 2 - 1.5, y1 + 1, zl + 4)
-    fr -= box(ESP_X - 7.5, y1 - 6, Z_PL + 0.5, ESP_X + 7.5, y1 + 1, zl + 4)
+    y0, zl = y1 - el - 0.3, USB_Z + 1.6              # передний торец платы и опорная полка
+    xa, xb = ESP_X - ew / 2 - 0.2, ESP_X + ew / 2 + 0.2
+    fr = box(xa - 2.2, y0 - 8, Z_FLOOR - 0.1, xb + 2.2, y1, zl + 4.6)
+    fr -= box(xa, y0, zl, xb, y1 + 1, zl + 6)                                  # карман платы
+    fr -= box(xa + 1.5, y0 + 1.5, Z_FLOOR, xb - 1.5, y1 + 1, zl + 6)           # место под детали платы
+    fr -= box(xa - 3, y0 - 9, zl + 1.6, xb + 3, y0 + 4.5, zl + 6)              # площадка под прижим
+    fr -= box(ESP_X - 9.6, y0 - 0.1, zl - 4, ESP_X + 9.6, y0 + 2, zl + 1)            # антенна модуля не лежит на полке
+    fr -= box(ESP_X - 7.5, y1 - 6, Z_PL + 0.5, ESP_X + 7.5, y1 + 1, zl + 6)    # окно USB
+    for sx, xw in ((1, xa), (-1, xb)):                                         # зацепы у USB-конца
+        w = poly([(-1, zl + 1.8), (0, zl + 1.8), (2.8, zl + 4.6), (-1, zl + 4.6)] if sx > 0 else [(1, zl + 1.8), (1, zl + 4.6), (-2.8, zl + 4.6), (0, zl + 1.8)])
+        fr += xf(w.extrude(5.5), [(1, 0, 0), (0, 0, 1), (0, -1, 0)], (xw, y1 - 0.5, 0))
+    for dx in (-10, 10):
+        fr -= cyl(1.3, zl - 9, zl + 2, ESP_X + dx, y0 - 4)
     m += fr
-    # полки под плату ЦАП (AUX) и модуль microSD
-    m += box(DAC_X - 9, y1 - 34, Z_FLOOR - 0.1, DAC_X + 9, y1 - 2.4, AUX_Z - 4.1)
-    m += box(SD_X - 9, y1 - 26, Z_FLOOR - 0.1, SD_X + 9, y1 - 2.4, SD_Z - 2.0)
-    # стойки и отверстия под винты M3
+    # --- ЦАП (AUX) и microSD: полка с бортиками, упор и площадка под прижим на дальнем торце
+    for (bw, bl), bx, ztop in ((P["dac"], DAC_X, AUX_Z - 4.1), (P["sd"], SD_X, SD_Z - 2.6)):
+        ya = y1 - bl
+        sh = box(bx - bw / 2 - 1.4, ya - 6, Z_FLOOR - 0.1, bx + bw / 2 + 1.4, y1 + 0.4, ztop + 1.6)
+        sh -= box(bx - bw / 2 - 0.2, ya, ztop, bx + bw / 2 + 0.2, y1 + 1, ztop + 3)
+        for dx in (-bw / 2 + 4, bw / 2 - 4):
+            sh -= cyl(1.3, ztop - 9, ztop + 2, bx + dx, ya - 3)
+        m += sh
+    # --- три усилителя MAX98357A: отсек с перегородками у передней стенки
+    aw, al = P["amp"]
+    wtot = 3 * (aw + 0.4) + 4 * 1.6
+    bay = box(-wtot / 2 - 7, AMP_Y - 1.6, Z_FLOOR - 0.1, wtot / 2 + 7, AMP_Y + al + 2.0, Z_FLOOR + 2.0)
+    for k in range(3):
+        xk = -wtot / 2 + 1.6 + k * (aw + 2.0)
+        bay -= box(xk, AMP_Y, Z_FLOOR, xk + aw + 0.4, AMP_Y + al + 0.4, Z_FLOOR + 3)
+    m += bay
+    for sx in (-1, 1):
+        m -= cyl(1.3, 7.0, Z_FLOOR + 3, sx * (wtot / 2 + 3.5), AMP_Y + al / 2)
+    # --- стойки и отверстия под винты M3 корпуса
     for x, y in BOSS:
         m += cyl(5.5, 8.0, Z_PL, x, y) ^ ext(inner, 8.0, Z_PL)
         m -= cyl(1.7, 7.0, Z_PL + 4, x, y)
         m -= cyl(3.3, 7.0, 13.0, x, y)
+    return m
+
+def end_clamp(bw):
+    """Прижимная планка торца платы. Локально: лежит на z = 0."""
+    m = box(-bw / 2 - 1.4, 0, 0, bw / 2 + 1.4, 9.0, 2.4)
+    for dx in (-bw / 2 + 4, bw / 2 - 4):
+        m -= cyl(1.7, -1, 3, dx, 3.0)
+    return m
+
+def make_esp_clamp():
+    ew = P["esp"][0]
+    m = box(-ew / 2 - 2.4, 0, 0, ew / 2 + 2.4, 12.0, 2.4)
+    for dx in (-10, 10):
+        m -= cyl(1.7, -1, 3, dx, 4.0)
+    return m
+
+def make_amp_clamp():
+    """Рамка-прижим трёх усилителей: окна над платами, края рамки держат платы за боковые кромки."""
+    aw, al = P["amp"]
+    wtot = 3 * (aw + 0.4) + 4 * 1.6
+    m = box(-wtot / 2 - 7, -1.6, 0, wtot / 2 + 7, al + 2.0, 2.0)
+    for k in range(3):
+        xk = -wtot / 2 + 1.6 + k * (aw + 2.0)
+        m -= box(xk + 1.2, 0.0, -1, xk + aw + 0.4 - 1.2, al + 0.4, 3)
+    for sx in (-1, 1):
+        m -= cyl(1.7, -1, 3, sx * (wtot / 2 + 3.5), al / 2)
+    return m
+
+def make_spk_ring():
+    """Кольцо-прижим бокового динамика: тремя винтами стягивает динамик, решётку и стенку. Локально: к стенке — z = 0."""
+    m = cyl(28.5, 0.0, 2.4) - cyl(17.6, -1, 3)
+    m -= cyl(P["spk_d"] / 2 + 0.4, -1, P["spk_rim"] - GR_T - P["wall"] + 2.4 + 0.2)
+    for a in (90, 210, 330):
+        m -= cyl(1.7, -1, 3, SCR_R * math.cos(math.radians(a)), SCR_R * math.sin(math.radians(a)))
+    return m
+
+def make_horn_ring():
+    """Прижим динамика трубы снизу гнезда под декой."""
+    rs = P["spk_d"] / 2
+    m = cyl(rs + 2.5, 74.6, 77.0) + cyl(rs + 0.1, 77.0, 83.15 - P["spk_rim"] - 0.05)
+    for a in HORN_EARS:
+        ex, ey = 26.5 * math.cos(math.radians(a)), 26.5 * math.sin(math.radians(a))
+        m += cyl(4.5, 74.6, 77.0, ex, ey)
+    m -= cyl(rs - 2.4, 73.0, 84.0)
+    m ^= ext(outline().offset(-P["wall"] - 0.3, JoinType.Miter).translate([-H[0], -H[1]]), 70.0, 90.0)
+    for a in HORN_EARS:
+        m -= cyl(1.7, 73.0, 78.0, 26.5 * math.cos(math.radians(a)), 26.5 * math.sin(math.radians(a)))
     return m
 
 def baluster_profile():
@@ -270,14 +353,14 @@ def make_platter():
     zt = Z_TOP + PLAT_T
     m = cyl(PLAT_R, Z_TOP, zt - 1) + cyl(PLAT_R, zt - 1, zt, r2=PLAT_R - 1)
     m -= cyl(34.05, Z_TOP - 1, zt + 1)
-    for r in np.arange(37.0, 53.0, 1.6):
+    for r in np.arange(36.6, PLAT_R - 2.0, 1.6):
         m -= cyl(r + 0.35, zt - 0.3, zt + 1) - cyl(r, zt - 1, zt + 2)
     return m
 
 def make_grille():
-    """Решётка бокового динамика с гнездом. Локально: лицо на z = 0, труба вверх."""
+    """Решётка бокового динамика с гнездом. Локально: лицо на z = 0, труба вверх (сквозь стенку)."""
     rs = P["spk_d"] / 2
-    m = cyl(27.6, 0.0, 0.8, r2=29.0) + cyl(29.0, 0.8, 2.4) + cyl(rs + 3.0, 2.4, 9.0)
+    m = cyl(29.6, 0.0, 0.8, r2=31.0) + cyl(31.0, 0.8, 2.4) + cyl(GR_R, 2.4, 2.4 + GR_T)
     m -= cyl(rs + 0.3, 2.4, 10.0)
     m -= cyl(rs - 1.5, -1.0, 3.0)
     blades = []
@@ -291,22 +374,23 @@ def make_grille():
         blades.append(poly(pts_r + pts_l[::-1]))
     sw = CrossSection.batch_boolean(blades, OpType.Add) + CrossSection.circle(4.5)
     m += ext(sw, 0.0, 2.4)
-    m += cyl(2.2, 0.0, 2.4)
+    for a in (90, 210, 330):
+        m -= cyl(1.3, 0.6, 6.0, SCR_R * math.cos(math.radians(a)), SCR_R * math.sin(math.radians(a)))
     return m
 
 def make_plate():
     """Декоративный шильдик на лицо. Локально: лежит на z = 0, лицом вверх."""
-    m = ext(rrect(35.0, 15.0, 3), 0.0, 1.6)
-    m += ext(rrect(35.0, 15.0, 3) - rrect(33.4, 13.4, 2), 1.6, 2.4)
-    m += ext(rrect(11.5, 4.8, 1.5).translate([0, 6.5]), 1.6, 2.6)
-    m -= ext(rrect(10.0, 3.3, 1).translate([0, 6.5]), 2.0, 3.0)
+    m = ext(rrect(30.0, 13.0, 3), 0.0, 1.6)
+    m += ext(rrect(30.0, 13.0, 3) - rrect(28.4, 11.4, 2), 1.6, 2.4)
+    m += ext(rrect(10.0, 4.2, 1.5).translate([0, 5.6]), 1.6, 2.6)
+    m -= ext(rrect(8.6, 2.8, 1).translate([0, 5.6]), 2.0, 3.0)
     for sx in (-1, 1):
-        for y in (6.5, -0.5, -7.5):
-            m += ext(rrect(4.6, 2.2, 0.8).translate([sx * 24.5, y]), 1.6, 2.4)
-    m -= ext(rrect(4.5, 1.6, 0.6).translate([0, -4.5]), 1.0, 3.0)
+        for y in (5.8, -0.2, -6.2):
+            m += ext(rrect(4.2, 1.9, 0.8).translate([sx * 20.5, y]), 1.6, 2.4)
+    m -= ext(rrect(4.2, 1.5, 0.6).translate([0, -4.2]), 1.0, 3.0)
     for sx in (-1, 1):
         for sy in (-1, 1):
-            m += cyl(1.3, 1.6, 2.6, sx * 31.2, sy * 11.2, seg=24)
+            m += cyl(1.2, 1.6, 2.6, sx * 26.6, sy * 9.6, seg=24)
     return m
 
 def make_riser():
@@ -370,12 +454,12 @@ def make_arm():
     """Тонарм: хомут на стойке трубы, короткая штанга и головка над краем диска."""
     z0, z1 = Z_TOP + 5.2, Z_TOP + 13.2
     d = (C - H) / np.linalg.norm(C - H)
-    head = C - d * 46.0
+    head = C - d * 41.0
     n = np.array([-d[1], d[0]])
     s0, s1 = H + d * 16.5, head
     beam = poly([s0 + n * 3.5, s0 - n * 3.5, s1 - n * 3.5, s1 + n * 3.5])
-    m = ext(beam, z0, z1) + cyl(18.2, z0, z1, H[0], H[1]) + cyl(11.0, z0, z1, head[0], head[1])
-    m += cyl(9.0, z1, z1 + 1.0, head[0], head[1]) + cyl(4.0, z1 + 1.0, z1 + 2.2, head[0], head[1])
+    m = ext(beam, z0, z1) + cyl(18.2, z0, z1, H[0], H[1]) + cyl(8.0, z0, z1, head[0], head[1])
+    m += cyl(6.5, z1, z1 + 1.0, head[0], head[1]) + cyl(3.0, z1 + 1.0, z1 + 2.2, head[0], head[1])
     return m - cyl(TUBE_R + 0.2, z0 - 1, z1 + 1, H[0], H[1])
 
 def make_knob():
@@ -388,8 +472,54 @@ def make_knob():
     return m - bore
 
 
+# ------------------------------------------------------------------ макеты покупных деталей (для проверки места)
+def speaker_ghost():
+    """Динамик: лицо на z = 0, корпус в +z."""
+    rs = P["spk_d"] / 2
+    return (cyl(rs, 0, P["spk_rim"]) + cyl(rs - 2.5, P["spk_rim"], P["spk_depth"] - 7, r2=P["spk_magnet"] / 2)
+            + cyl(P["spk_magnet"] / 2, P["spk_depth"] - 7, P["spk_depth"]))
+
+def ghosts():
+    """→ [(ключ, название, тело в сборке, вектор разнесения)]"""
+    g = []
+    cx, cy = C; hx, hy = H; y1 = WIN - 0.5
+    pl, pw, ph = P["pn532"]
+    g.append(("e_pn532", "PN532", box(cx - pl / 2, cy - pw / 2, Z_TOP - ph + 0.2, cx + pl / 2, cy + pw / 2, Z_TOP - 0.1), (0, 0, 70)))
+    ring = cyl(P["ring_od"] / 2, 79.4, 79.4 + P["ring_pcb"]) + cyl(P["ring_od"] / 2 - 1, 81.0, 82.6)
+    g.append(("e_ring", "Кольцо WS2812", (ring - cyl(P["ring_id"] / 2, 78, 84)).translate([cx, cy, 0]), (0, 0, -32)))
+    sp = speaker_ghost()
+    g.append(("e_spk_r", "Динамик правый", xf(sp, [(0, -1, 0), (0, 0, 1), (-1, 0, 0)], (HB, 0, SPK_Z)), (28, 0, 0)))
+    g.append(("e_spk_l", "Динамик левый", xf(sp, [(0, 1, 0), (0, 0, 1), (1, 0, 0)], (-HB, 0, SPK_Z)), (-28, 0, 0)))
+    g.append(("e_spk_h", "Динамик трубы", xf(sp, [(1, 0, 0), (0, -1, 0), (0, 0, -1)], (hx, hy, 83.1)), (0, 0, -20)))
+    ew, el = P["esp"]; zl = USB_Z + 1.6; y0 = y1 - el
+    esp = box(ESP_X - ew / 2, y0, zl, ESP_X + ew / 2, y1, zl + 1.6)
+    esp += box(ESP_X - 9, y0 + 1, zl - 3.4, ESP_X + 9, y0 + 27, zl)                    # модуль
+    esp += box(ESP_X - 4.5, y1 - 7.5, zl - 3.3, ESP_X + 4.5, y1, zl)                   # USB-C
+    for sx in (-1, 1):                                                               # штыри + разъёмы проводов
+        esp += box(ESP_X + sx * (ew / 2 - 1.3) - 1.3, y0 + 7, zl + 1.6, ESP_X + sx * (ew / 2 - 1.3) + 1.3, y1 - 7, zl + 24)
+    g.append(("e_esp", "ESP32", esp, (0, 0, -70)))
+    aw, al = P["amp"]; wtot = 3 * (aw + 0.4) + 4 * 1.6
+    for k in range(3):
+        xk = -wtot / 2 + 1.6 + k * (aw + 2.0) + 0.2
+        a = box(xk, AMP_Y + 0.2, Z_FLOOR + 0.3, xk + aw, AMP_Y + 0.2 + al, Z_FLOOR + 1.9)
+        a += box(xk + 4, AMP_Y + 0.2, Z_FLOOR + 1.9, xk + aw - 4, AMP_Y + 8, Z_FLOOR + 11.5)   # клеммник
+        g.append((f"e_amp{k+1}", "Усилитель MAX98357A", a, (0, 0, -70)))
+    (dw, dl), (sw, sl) = P["dac"], P["sd"]
+    zt = AUX_Z - 4.1
+    dac = box(DAC_X - dw / 2, y1 - dl, zt, DAC_X + dw / 2, y1, zt + 1.6) + box(DAC_X - 3.2, y1 - 12, zt + 1.6, DAC_X + 3.2, y1, zt + 6.6) + xf(cyl(3.0, 0, 3.0), [(-1, 0, 0), (0, 0, 1), (0, 1, 0)], (DAC_X, y1, AUX_Z))
+    g.append(("e_dac", "ЦАП PCM5102A", dac, (0, 0, -70)))
+    zt = SD_Z - 2.6
+    sd = box(SD_X - sw / 2, y1 - sl, zt, SD_X + sw / 2, y1, zt + 1.6) + box(SD_X - 7.5, y1 - 16, zt + 1.6, SD_X + 7.5, y1, zt + 3.6)
+    g.append(("e_sd", "Модуль microSD", sd, (0, 0, -70)))
+    bw, bh, bd = P["enc"]
+    enc = box(ENC_X - bw / 2, WIN - bd, ENC_Z - bh / 2, ENC_X + bw / 2, WIN, ENC_Z + bh / 2)
+    enc += xf(cyl(3.0, 0, 6.0), [(-1, 0, 0), (0, 0, 1), (0, 1, 0)], (ENC_X, WIN, ENC_Z))
+    g.append(("e_enc", "Энкодер EC11", enc, (0, -28, 0)))
+    return g
+
+
 # ------------------------------------------------------------------ сборка
-COL = dict(brown="#5c2019", gold="#c9a24a", black="#1c1c1e", white="#f2efe6")
+COL = dict(brown="#5c2019", gold="#c9a24a", black="#1c1c1e", white="#f2efe6", gray="#8d8f94", pcb="#2f7d4f")
 
 def build():
     """→ список деталей: имя, название, цвет, тело в сборке, вектор разнесения, поворот для печати."""
@@ -401,9 +531,9 @@ def build():
     add("base", "Основание", "brown", make_base(), (0, 0, -70))
     col, foot = make_column(), make_foot()
     for i, (sx, sy) in enumerate([(-1, -1), (1, -1), (1, 1), (-1, 1)]):
-        add(f"column{i+1}", "Балясина", "brown", col.translate([sx * 68.6, sy * 68.6, Z_PL + 0.15]),
+        add(f"column{i+1}", "Балясина", "brown", col.translate([sx * COLP, sy * COLP, Z_PL + 0.15]),
             (sx * 45, sy * 45, 0), (0, 0, 0), "column")
-        add(f"foot{i+1}", "Ножка", "brown", foot.translate([sx * 66, sy * 66, 0]), (0, 0, -100), (180, 0, 0), "foot")
+        add(f"foot{i+1}", "Ножка", "brown", foot.translate([sx * (HB - 6), sy * (HB - 6), 0]), (0, 0, -100), (180, 0, 0), "foot")
     add("cup", "Световой стакан", "white", make_cup().translate([cx, cy, 0]), (0, 0, -22))
     add("retainer", "Прижим кольца", "white", make_retainer().translate([cx, cy, 0]), (0, 0, -42))
     add("hub", "Гнездо пластинки", "black", make_hub().translate([cx, cy, 0]), (0, 0, 55))
@@ -414,17 +544,33 @@ def build():
         (55, 0, 0), None, "grille")
     add("grille_l", "Решётка динамика", "gold", xf(g, [(0, 1, 0), (0, 0, 1), (1, 0, 0)], (-HB - 2.4, 0, SPK_Z)),
         (-55, 0, 0), None, "grille")
-    add("plate", "Шильдик", "gold", xf(make_plate(), [(1, 0, 0), (0, 0, 1), (0, -1, 0)], (0, -HB + 0.6, 38)),
+    add("plate", "Шильдик", "gold", xf(make_plate(), [(1, 0, 0), (0, 0, 1), (0, -1, 0)], (0, -HB + 0.6, 37)),
         (0, -45, 0), None, "plate")
     add("knob", "Ручка громкости", "gold", xf(make_knob(), [(-1, 0, 0), (0, 0, 1), (0, -1, 0)], (ENC_X, HB + 17.0, ENC_Z)),
         (0, 40, 0), None, "knob")
+    # крепёж электроники
+    sr = make_spk_ring()
+    add("spk_ring_r", "Прижим бокового динамика", "gray", xf(sr, [(0, -1, 0), (0, 0, 1), (-1, 0, 0)], (WIN, 0, SPK_Z)), (-30, 0, 0), None, "spk_ring")
+    add("spk_ring_l", "Прижим бокового динамика", "gray", xf(sr, [(0, 1, 0), (0, 0, 1), (1, 0, 0)], (-WIN, 0, SPK_Z)), (30, 0, 0), None, "spk_ring")
+    add("horn_ring", "Прижим динамика трубы", "gray", make_horn_ring().translate([H[0], H[1], 0]), (0, 0, -34))
+    y1 = WIN - 0.5; zl = USB_Z + 1.6
+    add("esp_clamp", "Прижим ESP32", "gray", make_esp_clamp().translate([ESP_X, y1 - P["esp"][1] - 0.3 - 8, zl + 1.6]), (0, 0, -50), None, "esp_clamp")
+    aw, al = P["amp"]
+    add("amp_clamp", "Рамка усилителей", "gray", make_amp_clamp().translate([0, AMP_Y, Z_FLOOR + 2.0]), (0, 0, -50), None, "amp_clamp")
+    add("dac_clamp", "Прижим ЦАП", "gray", end_clamp(P["dac"][0]).translate([DAC_X, y1 - P["dac"][1] - 6, AUX_Z - 4.1 + 1.6]), (0, 0, -50), None, "dac_clamp")
+    add("sd_clamp", "Прижим microSD", "gray", end_clamp(P["sd"][0]).translate([SD_X, y1 - P["sd"][1] - 6, SD_Z - 2.6 + 1.6]), (0, 0, -50), None, "sd_clamp")
     add("riser", "Стойка трубы", "gold", make_riser(), (0, 0, 45), (180, 0, 0))
     add("arm", "Тонарм", "gold", make_arm(), (0, 0, 78))
     add("elbow", "Колено трубы", "gold", make_elbow(), (0, 0, 105))
     add("bell", "Раструб", "gold", make_bell(), (-45, -45, 175), None, "bell")
     return parts
 
-LOCAL = dict(grille=make_grille, plate=make_plate, knob=make_knob, column=make_column, foot=make_foot)
+def build_height():
+    return max(p["m"].bounding_box()[5] for p in build())
+
+LOCAL = dict(grille=make_grille, plate=make_plate, knob=make_knob, column=make_column, foot=make_foot,
+             spk_ring=lambda: make_spk_ring().rotate([180, 0, 0]), esp_clamp=make_esp_clamp, amp_clamp=make_amp_clamp,
+             dac_clamp=lambda: end_clamp(P["dac"][0]), sd_clamp=lambda: end_clamp(P["sd"][0]))
 
 def print_mesh(part):
     """Тело в положении печати, опущенное на стол, центр по XY в нуле."""
@@ -494,7 +640,7 @@ PLATES = [
     ("2_osnovanie_brown", ["base", "column", "column", "column", "column", "foot", "foot", "foot", "foot"]),
     ("3_rastrub_gold", ["bell", "riser", "knob"]),
     ("4_dekor_gold", ["elbow", "arm", "grille", "grille", "plate"]),
-    ("5_disk_black", ["platter", "hub"]),
+    ("5_disk_black", ["platter", "hub", "spk_ring", "spk_ring", "horn_ring", "esp_clamp", "amp_clamp", "dac_clamp", "sd_clamp"]),
     ("6_svet_white", ["cup", "retainer", "diffuser"]),
 ]
 
@@ -514,6 +660,17 @@ def main():
             if vol > 0.5:
                 bad.append((a["key"], b["key"], round(vol, 1)))
     print("пересечения деталей (мм³):", bad or "нет")
+    gh = ghosts(); bad = []
+    for i, (k, t, m, e) in enumerate(gh):
+        for p in parts:
+            vol = (m ^ p["m"]).volume()
+            if vol > 0.5:
+                bad.append((k, p["key"], round(vol, 1)))
+        for k2, t2, m2, e2 in gh[i + 1:]:
+            vol = (m ^ m2).volume()
+            if vol > 0.5:
+                bad.append((k, k2, round(vol, 1)))
+    print("электроника упирается (мм³):", bad or "нет")
     # печать: STL и столы
     pm, summary = {}, []
     for p in parts:
@@ -532,6 +689,11 @@ def main():
     for p in parts:
         v, f = tris_of(p["m"])
         prev["parts"].append(dict(key=p["key"], title=p["title"], color=p["color"], explode=list(p["explode"]),
+                                  v=base64.b64encode(v.astype(np.float32).tobytes()).decode(),
+                                  f=base64.b64encode(f.astype(np.uint32).tobytes()).decode()))
+    for k, t, m, e in gh:
+        v, f = tris_of(m)
+        prev["parts"].append(dict(key=k, title=t, color="pcb", explode=list(e), ghost=True,
                                   v=base64.b64encode(v.astype(np.float32).tobytes()).decode(),
                                   f=base64.b64encode(f.astype(np.uint32).tobytes()).decode()))
     json.dump(prev, open(os.path.join(OUT, "preview.json"), "w"))

@@ -13,6 +13,6 @@ for s in summary:
 t = open(os.path.join(D, "preview_template.html"), encoding="utf-8").read()
 t = t.replace("__DATA__", open(os.path.join(D, "out", "preview.json")).read())
 t = t.replace("__SUMMARY__", json.dumps(summary, ensure_ascii=False))
-t = t.replace("__NPARTS__", str(sum(s["count"] for s in summary))).replace("__DIMS__", "168 × 168 × 330")
+t = t.replace("__NPARTS__", str(sum(s["count"] for s in summary))).replace("__DIMS__", "146 × 146 × %d" % round(g.build_height()))
 open(os.path.join(D, "out", "preview.html"), "w", encoding="utf-8").write(t)
 print("out/preview.html", os.path.getsize(os.path.join(D, "out", "preview.html")) // 1024, "КБ")

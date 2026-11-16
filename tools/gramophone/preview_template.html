@@ -50,7 +50,7 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
 <div class="wrap">
   <header>
     <h1>Mini-Vinyl Gramophone</h1>
-    <p>Корпус NFC-проигрывателя: __NPARTS__ печатных деталей, габарит __DIMS__ мм</p>
+    <p>Корпус NFC-проигрывателя: __NPARTS__ печатных деталей, габарит __DIMS__ мм. Зелёным показана электроника.</p>
   </header>
   <div class="grid">
     <div class="stage">
@@ -63,6 +63,7 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
           <button id="v-back" type="button">Сзади</button>
           <button id="v-top" type="button">Сверху</button>
           <button id="cut" type="button" aria-pressed="false">Разрез</button>
+          <button id="elec" type="button" aria-pressed="true">Электроника</button>
         </div>
       </div>
     </div>
@@ -98,7 +99,7 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
   var fill = new THREE.DirectionalLight(0xffe6c8, 0.35); fill.position.set(-400, 200, -300); scene.add(fill);
   var root = new THREE.Group(); root.rotation.x = -Math.PI / 2; scene.add(root);   // модель: Z вверх
   var clip = new THREE.Plane(new THREE.Vector3(0, 0, -1), 1e6);
-  var finish = { brown: [0.45, 0.05], gold: [0.32, 0.55], black: [0.5, 0.05], white: [0.7, 0.0] };
+  var finish = { brown: [0.45, 0.05], gold: [0.32, 0.55], black: [0.5, 0.05], white: [0.7, 0.0], gray: [0.6, 0.1], pcb: [0.5, 0.1] };
   var meshes = {};
   data.parts.forEach(function (p) {
     var g = new THREE.BufferGeometry();
@@ -128,6 +129,11 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
   var slider = document.getElementById('explode');
   slider.addEventListener('input', function () { setExplode(slider.value / 100); center.y = 150 + 60 * slider.value / 100; controls.target.copy(center); });
   ['iso', 'front', 'back', 'top'].forEach(function (n) { document.getElementById('v-' + n).addEventListener('click', function () { setView(n); }); });
+  var elBtn = document.getElementById('elec');
+  elBtn.addEventListener('click', function () {
+    var on = elBtn.getAttribute('aria-pressed') !== 'true'; elBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    Object.keys(meshes).forEach(function (k) { if (meshes[k].userData.ghost) meshes[k].visible = on; });
+  });
   var cutBtn = document.getElementById('cut');
   function setCut(on) { clip.constant = on ? 8 : 1e6; cutBtn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
   cutBtn.addEventListener('click', function () { setCut(cutBtn.getAttribute('aria-pressed') !== 'true'); });
@@ -139,7 +145,7 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
       '</td><td class="n">' + s.x.toFixed(0) + ' × ' + s.y.toFixed(0) + ' × ' + s.z.toFixed(0) + '</td><td>' + s.plate + '</td>';
     function toggle() {
       var off = tr.classList.toggle('off');
-      Object.keys(meshes).forEach(function (k) { if (k === s.key || k.replace(/(\d|_[lr])$/, '') === s.key) meshes[k].visible = !off; });
+      Object.keys(meshes).forEach(function (k) { if (!meshes[k].userData.ghost && (k === s.key || k.replace(/(\d|_[lr])$/, '') === s.key)) meshes[k].visible = !off; });
     }
     tr.addEventListener('click', toggle);
     tr.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
