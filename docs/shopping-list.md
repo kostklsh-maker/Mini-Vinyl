@@ -27,6 +27,7 @@
 | 7б | Лента | [WS2812B 30/60/74/96/144 LEDs/m](https://www.aliexpress.com/item/3256807796309465.html) | 4.8 | 6000+ | 6–9 $ | **1 m, 144 LEDs/m, IP30** |
 | 8 | Энкодер | [EC11 20 мм с кнопкой и колпачком, 5 наборов](https://www.aliexpress.com/item/3256807550686279.html) | 4.9 | 446 | 3–8 $ | вал 20 мм, с колпачками |
 | 9 | Конденсатор | [Low ESR Aluminum Capacitor](https://www.aliexpress.com/item/3256806000543618.html) | 4.9 | 10 000+ | 1–3 $ | **16V 1000UF** |
+| 13 | ЦАП для AUX | [GY-PCM5102 I2S DAC, 1/3 шт.](https://www.aliexpress.com/item/3256808584057690.html) | 4.8 | 700+ | 1,9 $ | плата с гнездом 3,5 мм; запасной — [TENSATR PCM5102](https://www.aliexpress.com/item/3256809711531807.html), 4.9, 1000+ |
 
 Провод, винты M3, ножки и карту памяти не проверял — для них ссылки на поиск в таблице ниже.
 
