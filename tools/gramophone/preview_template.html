@@ -111,12 +111,12 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
       side: THREE.DoubleSide, clippingPlanes: [clip], flatShading: false }));
     m.userData = p; root.add(m); meshes[p.key] = m;
   });
-  var center = new THREE.Vector3(0, 150, 0);
+  var center = new THREE.Vector3(0, 118, 0);
   function setExplode(t) {
     Object.keys(meshes).forEach(function (k) { var e = meshes[k].userData.explode; meshes[k].position.set(e[0] * t, e[1] * t, e[2] * t); });
   }
   function setView(name) {
-    var d = 760 + 560 * slider.value / 100, t = center.clone();
+    var d = 600 + 470 * slider.value / 100, t = center.clone();
     var pos = { iso: [-0.62, 0.42, 0.78], front: [0, 0.12, 1], back: [0.25, 0.2, -1], top: [0, 1, 0.02] }[name];
     var v = new THREE.Vector3(pos[0], pos[1], pos[2]).normalize().multiplyScalar(d);
     camera.position.copy(t.clone().add(v)); controls.target.copy(t); controls.update();
@@ -127,7 +127,7 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
   }
   var slider = document.getElementById('explode');
-  slider.addEventListener('input', function () { setExplode(slider.value / 100); center.y = 150 + 60 * slider.value / 100; controls.target.copy(center); });
+  slider.addEventListener('input', function () { setExplode(slider.value / 100); center.y = 118 + 45 * slider.value / 100; controls.target.copy(center); });
   ['iso', 'front', 'back', 'top'].forEach(function (n) { document.getElementById('v-' + n).addEventListener('click', function () { setView(n); }); });
   var elBtn = document.getElementById('elec');
   elBtn.addEventListener('click', function () {
