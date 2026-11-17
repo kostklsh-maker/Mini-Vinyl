@@ -26,7 +26,7 @@ P = dict(
     pn532=(43.0, 41.0, 4.5),  # плата PN532 V3: длина, ширина, высота с деталями
     ring_od=66.0, ring_id=52.0, ring_pcb=1.6,   # кольцо WS2812B на 24 диода
     # --- звук ---
-    exc=(50.0, 24.0),         # вибродинамик (exciter): диаметр корпуса, полная высота
+    exc=(50.0, 30.0, 34.0),   # вибродинамик AIYIMA 50 мм 4 Ом: диаметр корпуса, полная высота, Ø пятака
     # --- платы ---
     esp=(28.3, 51.6),         # ESP32 DevKit 30 pin: ширина, длина
     amp=(18.0, 19.0),         # MAX98357A: ширина, длина
@@ -51,7 +51,7 @@ EAR_R = 43.5
 ESP_X = -33.0                # ESP32 стоит на ребре вдоль левой стенки: плоскость платы; штыри смотрят внутрь корпуса (+x)
 ESP_ZB = 22.0                # нижняя кромка платы ESP32
 USB_X, USB_Z = ESP_X - 2.4, ESP_ZB + P["esp"][0] / 2
-TOW_X, AUX_Z, SD_Z = 25.0, 30.0, 42.0      # «этажерка» у задней стенки: ЦАП внизу, microSD над ним
+TOW_X, AUX_Z, SD_Z = 25.0, 30.0, 44.0      # «этажерка» у задней стенки: ЦАП внизу, microSD над ним
 ENC_Z = 38.5                 # центр ручки громкости на лице
 ENC_SCR = 21.0               # винты держателя ручки: ±x от центра
 EXC = np.array([2.0, -10.0])   # центр вибродинамика на дне
@@ -240,7 +240,7 @@ def make_base():
     for sy in (-1, 1):
         m -= cyl(1.3, 7.0, Z_FLOOR + 3, ax, ay + sy * (al / 2 + 4.3))
     # --- вибродинамик: три стойки ограничителя вокруг (сам клеится пятаком к полу)
-    ed, eh = P["exc"]
+    ed, eh, epd = P["exc"]
     for a in EXC_POSTS:
         px, py = EXC[0] + EXC_PR * math.cos(math.radians(a)), EXC[1] + EXC_PR * math.sin(math.radians(a))
         m += cyl(3.5, F, Z_FLOOR + eh + 2.0, px, py) - cyl(1.3, Z_FLOOR + eh - 10, Z_FLOOR + eh + 3, px, py)
@@ -481,8 +481,8 @@ def ghosts():
     g.append(("e_pn532", "PN532", box(cx - pl / 2, cy - pw / 2, Z_TOP - ph + 0.2, cx + pl / 2, cy + pw / 2, Z_TOP - 0.1), (0, 0, 62)))
     ring = cyl(P["ring_od"] / 2, 79.4, 79.4 + P["ring_pcb"]) + cyl(P["ring_od"] / 2 - 1, 81.0, 82.6)
     g.append(("e_ring", "Кольцо WS2812", (ring - cyl(P["ring_id"] / 2, 78, 84)).translate([cx, cy, DZ]), (0, 0, -30)))
-    ed, eh = P["exc"]
-    exc = cyl(13.0, Z_FLOOR, Z_FLOOR + 3.0) + cyl(ed / 2, Z_FLOOR + 3.0, Z_FLOOR + eh)
+    ed, eh, epd = P["exc"]
+    exc = cyl(epd / 2, Z_FLOOR, Z_FLOOR + eh - 20.0) + cyl(ed / 2, Z_FLOOR + eh - 20.0, Z_FLOOR + eh)
     g.append(("e_exc", "Вибродинамик", exc.translate([EXC[0], EXC[1], 0]), (0, 0, -52)))
     ew, el = P["esp"]; y0 = y1 - el; zb = ESP_ZB
     esp = box(ESP_X - 0.8, y0, zb, ESP_X + 0.8, y1, zb + ew)
