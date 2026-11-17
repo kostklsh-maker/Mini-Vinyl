@@ -5,15 +5,15 @@
 /* Layout: 3D stage on the left, parts ledger on the right; stacks to one column on a phone. */
 :root {
   --bg: #f3efe9; --panel: #fbf9f6; --fg: #2a1d1a; --muted: #7a6660; --line: #dcd2c8;
-  --accent: #8a2f24; --stage: #e6dfd6;
+  --accent: #8a2f24; --stage: #e6dfd6; --pcb: #2f7d4f; --tag-bg: #fbf9f6; --tag-fg: #2a1d1a; --tag-line: #d2c6ba;
   --display: "Space Grotesk", "Segoe UI", sans-serif; --body: "Inter", "Segoe UI", sans-serif;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #1b1514; --panel: #241c1a; --fg: #efe6df; --muted: #a8948c; --line: #3b2e2a;
-  --accent: #d9a441; --stage: #120e0d; color-scheme: dark } }
+  --accent: #d9a441; --stage: #120e0d; --pcb: #2f7d4f; --tag-bg: #2b2220; --tag-fg: #efe6df; --tag-line: #4a3b36; color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #1b1514; --panel: #241c1a; --fg: #efe6df; --muted: #a8948c; --line: #3b2e2a;
-  --accent: #d9a441; --stage: #120e0d; color-scheme: dark }
+  --accent: #d9a441; --stage: #120e0d; --pcb: #2f7d4f; --tag-bg: #2b2220; --tag-fg: #efe6df; --tag-line: #4a3b36; color-scheme: dark }
 body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.45;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 32px; }
 .wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
@@ -45,6 +45,28 @@ tr.part.off td { opacity: .4; }
 tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
 .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 7px; vertical-align: -1px; border: 1px solid var(--line); }
 .note { color: var(--muted); font-size: 13px; margin: 0; }
+.tags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.tag { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 5px; white-space: nowrap;
+  font: 600 12px var(--body); color: var(--tag-fg); background: var(--tag-bg); border: 1px solid var(--tag-line); border-radius: 999px;
+  padding: 2px 8px 2px 2px; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+.tag b, .num { display: inline-grid; place-items: center; min-width: 20px; height: 20px; border-radius: 999px; background: var(--pcb); color: #fff;
+  font: 600 11px var(--body); font-variant-numeric: tabular-nums; }
+.tag.hot { outline: 2px solid var(--accent); }
+@media (max-width: 560px) { .tag span { display: none; } .tag { padding: 2px; } }
+.elist { list-style: none; margin: 0; padding: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.elist li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 2px 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.elist li:last-child { border-bottom: 0; }
+.elist li:hover, .elist li.hot { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.elist li:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.elist .num { grid-row: span 3; align-self: start; margin-top: 1px; }
+.elist .nm { font-weight: 600; min-width: 0; }
+.elist .qty { color: var(--muted); font-variant-numeric: tabular-nums; }
+.elist .mk, .elist .wh, .elist .pn { grid-column: 2 / 4; min-width: 0; font-size: 13px; }
+.elist .mk { color: var(--muted); }
+.elist .pn { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 12px; }
+.elist .lbl { color: var(--muted); font-family: var(--body); font-size: 12px; margin-right: 4px; }
+.num.off { background: var(--muted); }
+.lead { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 </style>
 
 <div class="wrap">
@@ -55,6 +77,7 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
   <div class="grid">
     <div class="stage">
       <canvas id="view"></canvas>
+      <div class="tags" id="tags" aria-hidden="true"><svg class="lead" id="lead"></svg></div>
       <div class="bar">
         <label for="explode">В сборе <input id="explode" type="range" min="0" max="100" value="0"> В разборе</label>
         <div class="btns">
@@ -64,15 +87,20 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
           <button id="v-top" type="button">Сверху</button>
           <button id="cut" type="button" aria-pressed="false">Разрез</button>
           <button id="elec" type="button" aria-pressed="true">Электроника</button>
+          <button id="xray" type="button" aria-pressed="false">Прозрачный корпус</button>
         </div>
       </div>
     </div>
     <div class="side">
       <div>
-        <h2>Детали</h2>
+        <h2>Электроника</h2>
+        <ul class="elist" id="elec-list"></ul>
+      </div>
+      <div>
+        <h2>Печатные детали</h2>
         <div class="tablebox"><table id="parts"><thead><tr><th>Деталь</th><th class="n">Шт.</th><th class="n">Размер при печати, мм</th><th>Стол</th></tr></thead><tbody></tbody></table></div>
       </div>
-      <p class="note">Тяните модель мышью или пальцем, чтобы повернуть; колесо или щипок — масштаб. Нажмите на строку таблицы, чтобы скрыть или показать деталь.</p>
+      <p class="note">Тяните модель мышью или пальцем, чтобы повернуть; колесо или щипок — масштаб. Номера на модели совпадают с таблицей электроники: нажмите на строку, чтобы подсветить модуль. Строка печатной детали скрывает или показывает её.</p>
     </div>
   </div>
 </div>
@@ -81,6 +109,7 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script id="data" type="application/json">__DATA__</script>
 <script id="summary" type="application/json">__SUMMARY__</script>
+<script id="elec-data" type="application/json">__ELEC__</script>
 <script>
 (function () {
   var data = JSON.parse(document.getElementById('data').textContent);
@@ -109,14 +138,66 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
     var f = finish[p.color];
     var m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: data.colors[p.color], roughness: f[0], metalness: f[1],
       side: THREE.DoubleSide, clippingPlanes: [clip], flatShading: false }));
+    if (p.ghost) { g.computeBoundingBox(); p.c = g.boundingBox.getCenter(new THREE.Vector3()); }
     m.userData = p; root.add(m); meshes[p.key] = m;
   });
+  // подписи электроники
+  var elec = JSON.parse(document.getElementById('elec-data').textContent);
+  var tagBox = document.getElementById('tags'), tags = [];
+  elec.forEach(function (e, i) {
+    if (!e.key || !meshes[e.key]) return;
+    var d = document.createElement('div'); d.className = 'tag';
+    d.innerHTML = '<b>' + e.n + '</b><span>' + e.short + '</span>';
+    tagBox.appendChild(d); tags.push({ el: d, mesh: meshes[e.key], n: e.n });
+  });
+  var tmpV = new THREE.Vector3(), lead = document.getElementById('lead'), SVGNS = 'http://www.w3.org/2000/svg';
+  tags.forEach(function (tg) {
+    tg.line = document.createElementNS(SVGNS, 'line'); tg.dot = document.createElementNS(SVGNS, 'circle');
+    tg.line.setAttribute('stroke', '#2f7d4f'); tg.line.setAttribute('stroke-width', '1.5');
+    tg.dot.setAttribute('r', '3'); tg.dot.setAttribute('fill', '#2f7d4f'); tg.dot.setAttribute('stroke', '#fff'); tg.dot.setAttribute('stroke-width', '1');
+    lead.appendChild(tg.line); lead.appendChild(tg.dot);
+  });
+  function placeTags() {
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    root.updateMatrixWorld();
+    var vis = [];
+    tags.forEach(function (tg) {
+      var show = tg.mesh.visible;
+      if (show) {
+        tmpV.copy(tg.mesh.userData.c).add(tg.mesh.position).applyMatrix4(root.matrixWorld).project(camera);
+        show = tmpV.z <= 1;
+      }
+      tg.el.hidden = !show; tg.line.style.display = tg.dot.style.display = show ? '' : 'none';
+      if (!show) return;
+      tg.ax = (tmpV.x + 1) / 2 * w; tg.ay = (1 - tmpV.y) / 2 * h;
+      tg.w = tg.el.offsetWidth || 60; tg.h = tg.el.offsetHeight || 24;
+      // подпись уходит в сторону от центра модели: левые влево, правые вправо
+      tg.side = tg.ax < w / 2 ? -1 : 1;
+      tg.x = tg.ax + tg.side * (tg.w / 2 + 26); tg.y = tg.ay;
+      vis.push(tg);
+    });
+    [-1, 1].forEach(function (side) {                 // раздвинуть подписи по вертикали в каждой колонке
+      var col = vis.filter(function (tg) { return tg.side === side; }).sort(function (a, b) { return a.y - b.y; });
+      for (var it = 0; it < 4; it++) for (var i = 1; i < col.length; i++) {
+        var a = col[i - 1], b = col[i], gap = (a.h + b.h) / 2 + 4;
+        if (b.y - a.y < gap) { var d = (gap - (b.y - a.y)) / 2; a.y -= d; b.y += d; }
+      }
+    });
+    vis.forEach(function (tg) {
+      tg.x = Math.max(tg.w / 2 + 4, Math.min(w - tg.w / 2 - 4, tg.x));
+      tg.y = Math.max(tg.h / 2 + 4, Math.min(h - tg.h / 2 - 4, tg.y));
+      tg.el.style.left = tg.x + 'px'; tg.el.style.top = tg.y + 'px';
+      var ex = tg.x - tg.side * tg.w / 2;
+      tg.line.setAttribute('x1', tg.ax); tg.line.setAttribute('y1', tg.ay); tg.line.setAttribute('x2', ex); tg.line.setAttribute('y2', tg.y);
+      tg.dot.setAttribute('cx', tg.ax); tg.dot.setAttribute('cy', tg.ay);
+    });
+  }
   var center = new THREE.Vector3(0, 118, 0);
   function setExplode(t) {
     Object.keys(meshes).forEach(function (k) { var e = meshes[k].userData.explode; meshes[k].position.set(e[0] * t, e[1] * t, e[2] * t); });
   }
   function setView(name) {
-    var d = 600 + 470 * slider.value / 100, t = center.clone();
+    var d = 500 + 470 * slider.value / 100, t = center.clone();
     var pos = { iso: [-0.62, 0.42, 0.78], front: [0, 0.12, 1], back: [0.25, 0.2, -1], top: [0, 1, 0.02] }[name];
     var v = new THREE.Vector3(pos[0], pos[1], pos[2]).normalize().multiplyScalar(d);
     camera.position.copy(t.clone().add(v)); controls.target.copy(t); controls.update();
@@ -133,6 +214,34 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
   elBtn.addEventListener('click', function () {
     var on = elBtn.getAttribute('aria-pressed') !== 'true'; elBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
     Object.keys(meshes).forEach(function (k) { if (meshes[k].userData.ghost) meshes[k].visible = on; });
+  });
+  var xrBtn = document.getElementById('xray');
+  function setXray(on) {
+    xrBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    Object.keys(meshes).forEach(function (k) { var m = meshes[k]; if (m.userData.ghost) return;
+      m.material.transparent = on; m.material.opacity = on ? 0.22 : 1; m.material.depthWrite = !on; m.material.needsUpdate = true; });
+  }
+  xrBtn.addEventListener('click', function () { setXray(xrBtn.getAttribute('aria-pressed') !== 'true'); });
+  // таблица электроники
+  var etb = document.getElementById('elec-list'), hotTimer = null;
+  elec.forEach(function (e) {
+    var tr = document.createElement('li'); tr.tabIndex = 0;
+    tr.innerHTML = '<span class="num' + (e.key ? '' : ' off') + '">' + e.n + '</span><span class="nm">' + e.name + '</span><span class="qty">× ' + e.qty +
+      '</span><span class="mk">' + e.mark + '</span><span class="wh"><span class="lbl">Где:</span>' + e.where +
+      '</span><span class="pn"><span class="lbl">Пины:</span>' + e.pins + '</span>';
+    function hot() {
+      etb.querySelectorAll('li.hot').forEach(function (r) { r.classList.remove('hot'); });
+      tags.forEach(function (tg) { tg.el.classList.toggle('hot', tg.n === e.n); });
+      Object.keys(meshes).forEach(function (k) { var m = meshes[k]; if (m.userData.ghost) m.material.emissive.setHex(k === e.key ? 0x996600 : 0x000000); });
+      tr.classList.add('hot');
+      if (e.key && meshes[e.key] && !meshes[e.key].visible) elBtn.click();
+      clearTimeout(hotTimer);
+      hotTimer = setTimeout(function () { tr.classList.remove('hot'); tags.forEach(function (tg) { tg.el.classList.remove('hot'); });
+        Object.keys(meshes).forEach(function (k) { if (meshes[k].userData.ghost) meshes[k].material.emissive.setHex(0); }); }, 4000);
+    }
+    tr.addEventListener('click', hot);
+    tr.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); hot(); } });
+    etb.appendChild(tr);
   });
   var cutBtn = document.getElementById('cut');
   function setCut(on) { clip.constant = on ? 8 : 1e6; cutBtn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
@@ -152,8 +261,8 @@ tr.part:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent)
     tb.appendChild(tr);
   });
   window.addEventListener('resize', resize);
-  window.mv = { setExplode: function (t) { slider.value = t * 100; slider.dispatchEvent(new Event('input')); }, setView: setView, setCut: setCut };
+  window.mv = { setExplode: function (t) { slider.value = t * 100; slider.dispatchEvent(new Event('input')); }, setView: setView, setCut: setCut, setXray: setXray };
   resize(); setView('iso');
-  (function loop() { resize(); controls.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
+  (function loop() { resize(); controls.update(); renderer.render(scene, camera); placeTags(); requestAnimationFrame(loop); })();
 })();
 </script>
