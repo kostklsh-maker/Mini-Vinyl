@@ -32,8 +32,7 @@ P = dict(
     amp=(18.0, 19.0),         # MAX98357A: ширина, длина
     dac=(17.5, 32.0),         # GY-PCM5102: ширина, длина (гнездо 3,5 мм на торце)
     sd=(24.0, 42.0),          # модуль microSD: ширина, длина (щель карты на торце)
-    enc=(12.5, 13.5, 7.0),    # корпус энкодера EC11
-    led=(7.2, 12.2),          # кусочек ленты WS2812 на 1 диод (подсветка ручки): длина, ширина
+    m5enc=(32.0, 24.0, 11.0, 16.0),   # модуль M5Stack Unit Encoder: ширина, высота, толщина корпуса без ручки, Ø ручки
 )
 
 # ------------------------------------------------------------------ геометрия корпуса
@@ -52,10 +51,11 @@ EAR_R = 43.5
 ESP_X = -33.0                # ESP32 стоит на ребре вдоль левой стенки: плоскость платы; штыри смотрят внутрь корпуса (+x)
 ESP_ZB = 22.0                # нижняя кромка платы ESP32
 USB_X, USB_Z = ESP_X - 2.4, ESP_ZB + P["esp"][0] / 2
-TOW_X, AUX_Z, SD_Z = 12.0, 30.0, 42.0      # «этажерка» у задней стенки: ЦАП внизу, microSD над ним
-ENC_Z = 39.5                 # центр ручки громкости на лице
-EXC = np.array([14.0, -17.0])   # центр вибродинамика на дне
-EXC_POSTS = [150.0, 215.0, 330.0]
+TOW_X, AUX_Z, SD_Z = 25.0, 30.0, 42.0      # «этажерка» у задней стенки: ЦАП внизу, microSD над ним
+ENC_Z = 38.5                 # центр ручки громкости на лице
+ENC_SCR = 21.0               # винты держателя ручки: ±x от центра
+EXC = np.array([2.0, -10.0])   # центр вибродинамика на дне
+EXC_POSTS = [90.0, 225.0, 330.0]
 EXC_PR = 28.5
 AMP_C = (-38.3, -20.0)       # центр усилителя (длинной стороной вдоль Y)
 PLAT_R, PLAT_T = 42.0, 4.0   # диск-платтер
@@ -180,8 +180,8 @@ def make_body():
     # лицо: окно ручки громкости, два винта держателя, декоративные «прорези» (глухие)
     m -= prism_y(CrossSection.circle(13.7).translate([0, ENC_Z]), -HB - 1, -HB + P["wall"] + 1)
     for sx in (-1, 1):
-        m -= prism_y(CrossSection.circle(1.7, 24).translate([sx * 16.9, ENC_Z]), -HB - 1, -HB + P["wall"] + 1)
-        for dx, hh in ((27.5, 17), (35.0, 12)):
+        m -= prism_y(CrossSection.circle(1.7, 24).translate([sx * ENC_SCR, ENC_Z]), -HB - 1, -HB + P["wall"] + 1)
+        for dx, hh in ((30.5, 17), (38.0, 12)):
             m -= prism_y(lens(5.5, hh, -sx * 6).translate([sx * dx, ENC_Z]), -HB - 1, -HB + 0.8)
     # задняя стенка: USB-C (плата стоит на ребре — разъём вертикально), AUX, microSD  (u = −x)
     m -= prism_y(rrect(3.9, 6.6, 2).translate([-USB_X, USB_Z]), WIN - 1, HB + 1)
@@ -227,8 +227,8 @@ def make_base():
     hi = sw / 2 + 0.2
     for sx in (-1, 1):
         xi = TOW_X + sx * hi
-        m += box(min(xi, xi + sx * 1.6), y1 - sl, F, max(xi, xi + sx * 1.6), y1 + 0.4, zs + 3.1)
-        m += strip_y([(xi + sx * 0.5, zs - 2.0), (xi + sx * 0.5, zs), (xi - sx * 1.5, zs), (xi, zs - 1.5)], y1 - sl, y1 + 0.4)
+        m += box(min(xi, xi + sx * 1.6), y1 - sl + 5, F, max(xi, xi + sx * 1.6), y1 + 0.4, zs + 3.1)
+        m += strip_y([(xi + sx * 0.5, zs - 2.0), (xi + sx * 0.5, zs), (xi - sx * 1.5, zs), (xi, zs - 1.5)], y1 - sl + 5, y1 + 0.4)
         pil = box(min(xi, xi + sx * 4.2), y1 - sl + 5, F, max(xi, xi + sx * 4.2), y1 - sl + 11, zs + 3.6)
         m += pil - cyl(1.3, zs - 7, zs + 4, xi + sx * 2.3, y1 - sl + 8)
     # --- усилитель MAX98357A: карман на полу, длинной стороной вдоль Y
@@ -294,24 +294,40 @@ def make_exc_cage():
     return m
 
 def make_enc_holder():
-    """Держатель энкодера с подсветкой (белый). Локально: z = 0 — наружная грань стенки, +z внутрь корпуса."""
-    lw, lh = P["led"]
-    bw, bh, bd = P["enc"]
-    m = cyl(13.5, 0, P["wall"] + 0.1) + ext(rrect(24.0, 13.0, 3), P["wall"], P["wall"] + 5.0)
-    m -= box(-bw / 2 - 0.2, -bh / 2 - 0.2, 1.6, bw / 2 + 0.2, bh / 2 + 0.2, 9)        # корпус энкодера
-    m -= cyl(3.6, -1, 2)                                                           # резьбовая втулка
+    """Держатель модуля M5Stack Unit Encoder (белый). Локально: z = 0 — наружная грань стенки, +z внутрь корпуса.
+    Модуль лежит в кармане ручкой наружу; держатель и крышку стягивают с лицом корпуса два винта M3 с гайками."""
+    w, h, d, kd = P["m5enc"]
+    t, f = P["wall"], 1.6
+    rk = kd / 2 + 1.5                                                    # зазор вокруг ручки: в нём светятся диоды модуля
+    m = cyl(13.5, 0, t + 0.1) + ext(rrect(ENC_SCR + 3.5, h / 2 + 2.2, 3), t, t + f)
+    m += ext(rrect(w / 2 + 2.2, h / 2 + 2.2, 2), t + f, t + f + d)
     for sx in (-1, 1):
-        x0 = sx * (bw / 2 + 1.0)
-        m -= box(min(x0, x0 + sx * (lw + 0.4)), -lh / 2 - 0.2, 1.0, max(x0, x0 + sx * (lw + 0.4)), lh / 2 + 0.2, 9)   # диод
-        m -= cyl(1.3, 2.0, 9, sx * 16.9, 0)
+        m += cyl(3.5, t + f, t + f + d, sx * ENC_SCR, 0)
+        m -= cyl(1.7, -1, t + f + d + 1, sx * ENC_SCR, 0)
+    m -= cyl(rk, -1, t + f + 0.5)
+    m -= ext(rrect(w / 2 + P["fit"], h / 2 + P["fit"], 0.3), t + f, t + f + d + 1)     # карман модуля
+    m -= box(w / 2 - 1, -6.0, t + f, w / 2 + 3, 6.0, t + f + d + 1)                    # выход кабеля Grove
+    return m
+
+def make_enc_cap():
+    """Крышка держателя: прижимает модуль сзади, гайки M3 в шестигранных гнёздах. Локально: z = 0 к модулю."""
+    w, h, d, kd = P["m5enc"]
+    m = ext(rrect(ENC_SCR + 3.5, h / 2 + 2.2, 3), 0, 2.4)
+    for sx in (-1, 1):
+        m -= cyl(1.7, -1, 3, sx * ENC_SCR, 0)
+        m -= cyl(3.2, 1.0, 3, sx * ENC_SCR, 0, seg=6)                    # гайка M3 (под ключ 5,5)
+    m -= box(w / 2 - 1, -6.0, -1, w / 2 + 3, 6.0, 3)                       # кабель
+    m -= ext(rrect(w / 2 - 6, h / 2 - 6, 2), -1, 3)                        # окно: облегчение и проверка модуля
     return m
 
 def make_bezel():
     """Золотое кольцо вокруг ручки: закрывает головки винтов держателя. Локально: z = 0 к стенке, +z наружу."""
-    m = cyl(21.0, 0, 2.2) + cyl(21.0, 2.2, 3.0, r2=20.0)
-    m -= cyl(12.5, -1, 4)
+    rk = P["m5enc"][3] / 2 + 1.5
+    m = ext(rrect(ENC_SCR + 4.5, 16.0, 8.0), 0, 2.2)
+    m += Manifold.batch_hull([ext(rrect(ENC_SCR + 4.5, 16.0, 8.0), 2.19, 2.2), ext(rrect(ENC_SCR + 3.7, 15.2, 7.2), 2.99, 3.0)])
+    m -= cyl(rk, -1, 4)
     for sx in (-1, 1):
-        m -= cyl(3.3, -1, 2.3, sx * 16.9, 0)
+        m -= cyl(3.3, -1, 2.3, sx * ENC_SCR, 0)
     return m
 
 def baluster_profile():
@@ -456,16 +472,6 @@ def make_arm():
     m += cyl(5.0, z1, z1 + 1.0, head[0], head[1]) + cyl(2.5, z1 + 1.0, z1 + 2.0, head[0], head[1])
     return m - cyl(TUBE_R + 0.2, z0 - 1, z1 + 1, H[0], H[1])
 
-def make_knob():
-    """Ручка громкости на вал энкодера EC11 (Ø6 с лыской). Локально: лицо на z = 0."""
-    m = cyl(8.0, 0.0, 1.0, r2=9.0) + cyl(9.0, 1.0, 13.0)
-    for k in range(18):
-        a = 2 * math.pi * k / 18
-        m -= cyl(0.9, 3.0, 14.0, 9.3 * math.cos(a), 9.3 * math.sin(a), seg=12)
-    bore = cyl(3.1, 3.0, 14.0, seg=36) - box(1.6, -4, 2.0, 4, 4, 15.0)
-    return m - bore
-
-
 # ------------------------------------------------------------------ макеты покупных деталей (для проверки места)
 def ghosts():
     """→ [(ключ, название, тело в сборке, вектор разнесения)]"""
@@ -483,7 +489,7 @@ def ghosts():
     esp += box(ESP_X - 4.2, y0 + 1, zb + ew / 2 - 9, ESP_X - 0.8, y0 + 27, zb + ew / 2 + 9)        # модуль
     esp += box(ESP_X - 4.0, y1 - 7.5, zb + ew / 2 - 4.5, ESP_X - 0.8, y1, zb + ew / 2 + 4.5)       # USB-C
     for zc in (zb + 1.3, zb + ew - 1.3):                                                        # штыри + разъёмы проводов
-        esp += box(ESP_X + 0.8, y0 + 7, zc - 1.3, ESP_X + 22.8, y1 - 7, zc + 1.3)
+        esp += box(ESP_X + 0.8, y0 + 7, zc - 1.3, ESP_X + 16.8, y1 - 7, zc + 1.3)   # Г-образные разъёмы или пайка
     g.append(("e_esp", "ESP32", esp, (0, 0, -70)))
     aw, al = P["amp"]; ax, ay = AMP_C
     a = box(ax - aw / 2, ay - al / 2, Z_FLOOR + 0.3, ax + aw / 2, ay + al / 2, Z_FLOOR + 1.9)
@@ -496,15 +502,12 @@ def ghosts():
     g.append(("e_dac", "ЦАП PCM5102A", dac, (0, 0, -70)))
     sd = box(TOW_X - sw / 2, y1 - sl, zs, TOW_X + sw / 2, y1, zs + 1.6) + box(TOW_X - 7.5, y1 - 16, zs + 1.6, TOW_X + 7.5, y1, zs + 3.4)
     g.append(("e_sd", "Модуль microSD", sd, (0, 0, -70)))
-    bw, bh, bd = P["enc"]
-    enc = box(-bw / 2, -HB + 1.6, ENC_Z - bh / 2, bw / 2, -HB + 1.6 + bd, ENC_Z + bh / 2)
-    enc += xf(cyl(3.0, 0, 6.0), [(1, 0, 0), (0, 0, 1), (0, -1, 0)], (0, -HB + 1.6, ENC_Z))
-    g.append(("e_enc", "Энкодер EC11", enc, (0, 22, 0)))
-    lw, lh = P["led"]
-    for i, sx in enumerate((-1, 1)):
-        xa = sx * (bw / 2 + 1.2)
-        led = box(min(xa, xa + sx * lw), -HB + 2.5, ENC_Z - lh / 2, max(xa, xa + sx * lw), -HB + 4.7, ENC_Z + lh / 2)
-        g.append((f"e_led{i+1}", "Диод подсветки ручки", led, (0, 22, 0)))
+    w, h, d, kd = P["m5enc"]
+    y0 = -HB + P["wall"] + 1.6
+    enc = box(-w / 2, y0, ENC_Z - h / 2, w / 2, y0 + d, ENC_Z + h / 2)
+    enc += xf(cyl(kd / 2, 0, 25.4 - d), [(1, 0, 0), (0, 0, 1), (0, -1, 0)], (0, y0, ENC_Z))
+    enc += box(-w / 2 - 2.5, y0 + 2, ENC_Z - 4, -w / 2, y0 + 9, ENC_Z + 4)                    # разъём Grove
+    g.append(("e_enc", "Модуль M5Stack Unit Encoder", enc, (0, 26, 0)))
     return g
 
 
@@ -529,9 +532,10 @@ def build():
     add("diffuser", "Рассеиватель", "white", make_diffuser().translate([cx, cy, 0]), (0, 0, 36), (180, 0, 0))
     add("platter", "Диск-платтер", "black", make_platter().translate([cx, cy, 0]), (0, 0, 22))
     # ручка громкости с подсветкой на лице
-    add("enc_holder", "Держатель ручки с подсветкой", "white", xf(make_enc_holder(), [(-1, 0, 0), (0, 0, 1), (0, 1, 0)], (0, -HB, ENC_Z)), (0, 30, 0), None, "enc_holder")
-    add("bezel", "Кольцо ручки", "gold", xf(make_bezel(), [(1, 0, 0), (0, 0, 1), (0, -1, 0)], (0, -HB, ENC_Z)), (0, -30, 0), None, "bezel")
-    add("knob", "Ручка громкости", "gold", xf(make_knob(), [(-1, 0, 0), (0, 0, 1), (0, 1, 0)], (0, -HB - 18.4, ENC_Z)), (0, -55, 0), None, "knob")
+    add("enc_holder", "Держатель ручки", "white", xf(make_enc_holder(), [(-1, 0, 0), (0, 0, 1), (0, 1, 0)], (0, -HB, ENC_Z)), (0, 30, 0), None, "enc_holder")
+    add("bezel", "Накладка ручки", "gold", xf(make_bezel(), [(1, 0, 0), (0, 0, 1), (0, -1, 0)], (0, -HB, ENC_Z)), (0, -30, 0), None, "bezel")
+    w, h, d, kd = P["m5enc"]
+    add("enc_cap", "Крышка держателя ручки", "white", xf(make_enc_cap(), [(-1, 0, 0), (0, 0, 1), (0, 1, 0)], (0, -HB + P["wall"] + 1.6 + d, ENC_Z)), (0, 46, 0), None, "enc_cap")
     # крепёж электроники
     ew, el = P["esp"]; y0 = y1 - el - 0.3
     cap = make_esp_cap()
@@ -550,7 +554,7 @@ def build():
 def build_height():
     return max(p["m"].bounding_box()[5] for p in build()) - Z_GND
 
-LOCAL = dict(knob=make_knob, column=make_column,
+LOCAL = dict(column=make_column, enc_cap=make_enc_cap,
              foot=lambda: make_foot().rotate([180, 0, 0]),
              bezel=lambda: make_bezel().rotate([180, 0, 0]),
              enc_holder=lambda: make_enc_holder().rotate([180, 0, 0]),
@@ -622,9 +626,9 @@ def pack(items, gap=5.0, margin=6.0):
 PLATES = [
     ("1_korpus_brown", ["body"]),
     ("2_osnovanie_brown", ["base", "column", "column", "column", "column", "foot", "foot", "foot", "foot"]),
-    ("3_truba_gold", ["bell", "riser", "elbow", "arm", "bezel", "knob"]),
+    ("3_truba_gold", ["bell", "riser", "elbow", "arm", "bezel"]),
     ("4_disk_black", ["platter", "hub", "exc_cage", "esp_cap", "esp_cap", "amp_clamp", "dac_clamp", "sd_clamp"]),
-    ("5_svet_white", ["cup", "retainer", "diffuser", "enc_holder"]),
+    ("5_svet_white", ["cup", "retainer", "diffuser", "enc_holder", "enc_cap"]),
 ]
 
 def main():

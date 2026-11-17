@@ -21,12 +21,14 @@ const int PIN_SDA = 21, PIN_SCL = 22, PIN_NFC_IRQ = 32, PIN_NFC_RST = 33;   // P
 const int PIN_SD_CS = 5;                                                    // microSD (SPI: 18, 23, 19)
 const int PIN_I2S_BCLK = 26, PIN_I2S_LRC = 25, PIN_I2S_DOUT = 27;           // MAX98357A и PCM5102A
 const int PIN_AMP_SD = 4;                                                   // вывод SD усилителя: глушит вибродинамик
-const int PIN_LED = 13;                                                     // WS2812: кольцо, затем 2 диода ручки
-const int PIN_ENC_A = 16, PIN_ENC_B = 17, PIN_ENC_SW = 14;                  // энкодер EC11
+const int PIN_LED = 13;                                                     // кольцо WS2812 под пластинкой
+// ручка громкости: модуль M5Stack Unit Encoder на той же шине I2C (21/22), адрес 0x40
 
 // ---------------------------------------------------------------- настройки
 const int   RING_N = 24;             // диодов в кольце
-const int   KNOB_N = 2;              // диодов подсветки ручки (в цепочке после кольца)
+const uint8_t ENC_ADDR = 0x40;       // M5Stack Unit Encoder: 0x10 счётчик (int16), 0x20 кнопка, 0x30 диоды [номер, R, G, B]
+const int   ENC_COUNTS_PER_STEP = 2; // импульсов модуля на один шаг громкости (1 или 2 — подберите по ощущению)
+const uint8_t KNOB_BRIGHT = 120;     // яркость подсветки ручки 0..255
 const int   RING_DIR = 1;            // 1 или -1: поменяйте, если свет бежит против часовой стрелки
 const float RING_RPS = 33.333f / 60; // обороты в секунду, как у винила
 const uint8_t LED_BRIGHT = 60;       // общая яркость 0..255
@@ -51,7 +53,7 @@ bool userPaused = false;             // пауза нажатием ручки (
 bool auxMode = false;                // true: звук только в AUX, вибродинамик выключен
 int volume = 10;
 
-CRGB leds[RING_N + KNOB_N];
+CRGB leds[RING_N];
 Preferences prefs;
 Adafruit_PN532 nfc(PIN_NFC_IRQ, PIN_NFC_RST, &Wire);
 
@@ -59,6 +61,10 @@ AudioFileSourceSD *srcFile = nullptr;
 AudioFileSourceID3 *srcId3 = nullptr;
 AudioGeneratorMP3 *mp3 = nullptr;
 AudioOutputI2S *out = nullptr;
+
+// шина I2C общая для PN532 и ручки: обращения с двух ядер — только под мьютексом
+SemaphoreHandle_t i2cLock;
+struct I2CGuard { I2CGuard() { xSemaphoreTake(i2cLock, portMAX_DELAY); } ~I2CGuard() { xSemaphoreGive(i2cLock); } };
 
 // метка: пишет задача NFC (ядро 0), читает loop (ядро 1)
 portMUX_TYPE nfcMux = portMUX_INITIALIZER_UNLOCKED;
@@ -70,7 +76,8 @@ void nfcTask(void *) {
   int misses = NFC_MISSES;
   for (;;) {
     uint8_t uid[8]; uint8_t len = 0;
-    bool ok = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &len, 120);
+    bool ok;
+    { I2CGuard g; ok = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &len, 120); }
     if (ok && len > 0) {
       char buf[24] = "";
       for (int i = 0; i < len && i < 10; i++) sprintf(buf + 2 * i, "%02X", uid[i]);
@@ -174,19 +181,51 @@ void pauseAudio() {
 }
 
 // ---------------------------------------------------------------- ручка
-volatile int encDelta = 0;
-void IRAM_ATTR encIsr() {
-  static uint8_t prev = 0; static int8_t acc = 0;
-  static const int8_t tbl[16] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
-  uint8_t cur = (digitalRead(PIN_ENC_A) << 1) | digitalRead(PIN_ENC_B);
-  acc += tbl[(prev << 2) | cur]; prev = cur;
-  if (acc >= 4) { encDelta++; acc = 0; } else if (acc <= -4) { encDelta--; acc = 0; }
+bool encOk = false;
+int16_t encLast = 0;
+int encAcc = 0;
+uint8_t btnIdle = 1;                 // уровень «кнопка отпущена», запоминается при старте
+
+bool encRead(uint8_t reg, uint8_t *buf, int n) {
+  I2CGuard g;
+  Wire.beginTransmission(ENC_ADDR); Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom((int)ENC_ADDR, n) != n) return false;
+  for (int i = 0; i < n; i++) buf[i] = Wire.read();
+  return true;
+}
+
+void encSetColor(CRGB c) {
+  static CRGB last(1, 2, 3);
+  if (c == last) return;
+  last = c;
+  for (uint8_t idx = 1; idx <= 2; idx++) {           // у модуля два диода SK6812
+    I2CGuard g;
+    Wire.beginTransmission(ENC_ADDR);
+    Wire.write(0x30); Wire.write(idx); Wire.write(c.r); Wire.write(c.g); Wire.write(c.b);
+    Wire.endTransmission();
+  }
+}
+
+int encSteps() {                     // шагов громкости с прошлого вызова
+  uint8_t b[2];
+  if (!encOk || !encRead(0x10, b, 2)) return 0;
+  int16_t v = (int16_t)(b[0] | (b[1] << 8));
+  encAcc += (int16_t)(v - encLast); encLast = v;
+  int st = encAcc / ENC_COUNTS_PER_STEP; encAcc -= st * ENC_COUNTS_PER_STEP;
+  return st;
+}
+
+bool encPressed() {
+  uint8_t b;
+  if (!encOk || !encRead(0x20, &b, 1)) return false;
+  return b != btnIdle;
 }
 
 enum Press { NONE, CLICK, DOUBLE, LONG };
 Press readButton() {
   static bool down = false, longSent = false; static uint32_t tDown = 0, tUp = 0; static int clicks = 0;
-  bool now = digitalRead(PIN_ENC_SW) == LOW; uint32_t t = millis();
+  bool now = encPressed(); uint32_t t = millis();
   if (now && !down) { down = true; tDown = t; longSent = false; }
   if (down && now && !longSent && t - tDown > 800) { longSent = true; clicks = 0; return LONG; }
   if (!now && down) { down = false; if (!longSent && t - tDown > 25) { clicks++; tUp = t; } }
@@ -223,10 +262,12 @@ void drawLeds() {
     CRGB c = (state == PAUSED) ? currentColor : COLOR_DEFAULT;
     fill_solid(leds, RING_N, CRGB(c.r * b, c.g * b, c.b * b));
   }
-  float kv = 0.15f + 0.85f * volume / VOL_STEPS;                       // ручка: ярче при большей громкости
-  CRGB kc = auxMode ? CRGB(40, 90, 255) : CRGB(255, 170, 80);
-  for (int i = 0; i < KNOB_N; i++) leds[RING_N + i] = CRGB(kc.r * kv, kc.g * kv, kc.b * kv);
   FastLED.show();
+  // ручка: ярче при большей громкости; синяя в режиме AUX
+  float kv = (0.15f + 0.85f * volume / VOL_STEPS) * KNOB_BRIGHT / 255.0f;
+  CRGB kc = auxMode ? CRGB(40, 90, 255) : CRGB(255, 170, 80);
+  static uint32_t lastKnob = 0;
+  if (t - lastKnob > 100) { lastKnob = t; encSetColor(CRGB(kc.r * kv, kc.g * kv, kc.b * kv)); }
 }
 
 // ---------------------------------------------------------------- логика пластинки
@@ -250,10 +291,8 @@ void onDiscPlaced(const String &uid) {
 void setup() {
   Serial.begin(115200);
   WiFi.mode(WIFI_OFF); btStop();
-  pinMode(PIN_ENC_A, INPUT_PULLUP); pinMode(PIN_ENC_B, INPUT_PULLUP); pinMode(PIN_ENC_SW, INPUT_PULLUP);
-  attachInterrupt(PIN_ENC_A, encIsr, CHANGE); attachInterrupt(PIN_ENC_B, encIsr, CHANGE);
-
-  FastLED.addLeds<WS2812B, PIN_LED, GRB>(leds, RING_N + KNOB_N);
+  i2cLock = xSemaphoreCreateMutex();
+  FastLED.addLeds<WS2812B, PIN_LED, GRB>(leds, RING_N);
   FastLED.setBrightness(LED_BRIGHT);
   FastLED.setMaxPowerInVoltsAndMilliamps(5, 350);
   FastLED.clear(true);
@@ -271,6 +310,11 @@ void setup() {
   applyVolume();
 
   Wire.begin(PIN_SDA, PIN_SCL);
+  Wire.setClock(100000);
+  { uint8_t b[2];
+    encOk = true;
+    if (encRead(0x10, b, 2)) { encLast = (int16_t)(b[0] | (b[1] << 8)); encRead(0x20, &btnIdle, 1); }
+    else { encOk = false; Serial.println("ручка M5Stack Unit Encoder не отвечает"); } }
   nfc.begin();
   if (!nfc.getFirmwareVersion()) Serial.println("PN532 не отвечает");
   nfc.SAMConfig();
@@ -297,8 +341,9 @@ void loop() {
   }
   wasPresent = present; lastUid = uid;
 
-  // ручка: поворот — громкость
-  noInterrupts(); int d = encDelta; encDelta = 0; interrupts();
+  // ручка: поворот — громкость (опрос модуля раз в 30 мс)
+  static uint32_t lastEnc = 0; int d = 0;
+  if (millis() - lastEnc >= 30) { lastEnc = millis(); d = encSteps(); }
   if (d) {
     volume = constrain(volume + d, 0, VOL_STEPS);
     applyVolume(); prefs.putInt("vol", volume);
