@@ -38,7 +38,7 @@ P = dict(
 # ------------------------------------------------------------------ геометрия корпуса
 HB = 54.0                    # полуширина коробки стенок (108 × 108)
 NOTCH = 12.0                 # угловая ниша под балясину
-Z_GND = 3.0                  # стол (низ ножек)
+Z_GND = -3.0                 # стол (низ ножек-«булок»)
 Z_FLOOR, Z_PL, Z_W1, Z_DECK, Z_TOP = 10.4, 18.0, 61.0, 68.0, 71.0   # пол, верх основания, низ карниза, низ и верх деки
 DZ = Z_DECK - 89.0           # сдвиг светового стакана
 WIN = HB - P["wall"]         # внутренняя грань стенки
@@ -58,7 +58,7 @@ EXC = np.array([2.0, -10.0])   # центр вибродинамика на дн
 EXC_POSTS = [90.0, 225.0, 330.0]
 EXC_PR = 28.5
 AMP_C = (-38.3, -20.0)       # центр усилителя (длинной стороной вдоль Y)
-PLAT_R, PLAT_T = 42.0, 4.0   # диск-платтер
+PLAT_R, PLAT_T = 40.0, 4.0   # диск-платтер (снаружи — латунный обод до Ø86,8)
 RISER_L = 55.0               # высота стойки трубы над декой
 BELL_L, BELL_R = 72.0, 46.0  # раструб: длина и радиус устья
 TUBE_R, BORE_R, SPIG_R, SPIG_L = 12.0, 7.5, 9.5, 8.0
@@ -181,8 +181,6 @@ def make_body():
     m -= prism_y(CrossSection.circle(13.7).translate([0, ENC_Z]), -HB - 1, -HB + P["wall"] + 1)
     for sx in (-1, 1):
         m -= prism_y(CrossSection.circle(1.7, 24).translate([sx * ENC_SCR, ENC_Z]), -HB - 1, -HB + P["wall"] + 1)
-        for dx, hh in ((30.5, 17), (38.0, 12)):
-            m -= prism_y(lens(5.5, hh, -sx * 6).translate([sx * dx, ENC_Z]), -HB - 1, -HB + 0.8)
     # задняя стенка: USB-C (плата стоит на ребре — разъём вертикально), AUX, microSD  (u = −x)
     m -= prism_y(rrect(3.9, 6.6, 2).translate([-USB_X, USB_Z]), WIN - 1, HB + 1)
     m -= prism_y(CrossSection.circle(3.5).translate([-TOW_X, AUX_Z]), WIN - 1, HB + 1)
@@ -320,28 +318,191 @@ def make_enc_cap():
     m -= ext(rrect(w / 2 - 6, h / 2 - 6, 2), -1, 3)                        # окно: облегчение и проверка модуля
     return m
 
-def make_bezel():
-    """Золотое кольцо вокруг ручки: закрывает головки винтов держателя. Локально: z = 0 к стенке, +z наружу."""
-    rk = P["m5enc"][3] / 2 + 1.5
-    m = ext(rrect(ENC_SCR + 4.5, 16.0, 8.0), 0, 2.2)
-    m += Manifold.batch_hull([ext(rrect(ENC_SCR + 4.5, 16.0, 8.0), 2.19, 2.2), ext(rrect(ENC_SCR + 3.7, 15.2, 7.2), 2.99, 3.0)])
-    m -= cyl(rk, -1, 4)
+# ------------------------------------------------------------------ стимпанк-декор
+def sphere(r, x=0.0, y=0.0, z=0.0, seg=16):
+    return Manifold.sphere(r, seg).translate([x, y, z])
+
+def rod(a, b, r, seg=20):
+    """Цилиндр между точками a и b (3D)."""
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    d = b - a; L = float(np.linalg.norm(d)); w = d / L
+    u = np.cross(w, [0, 0, 1.0]) if abs(w[2]) < 0.9 else np.cross(w, [1.0, 0, 0])
+    u /= np.linalg.norm(u); v = np.cross(w, u)
+    return xf(cyl(r, 0, L, seg=seg), [u, v, w], a)
+
+def flat_back(m):
+    """Срезать всё, что ниже z = 0: накладка ложится плоской спиной на стенку и на стол принтера."""
+    return m ^ box(-500, -500, 0, 500, 500, 500)
+
+DIAL_R = 15.0                # циферблат вокруг ручки: наружный радиус
+PANEL = (41.0, 18.0)         # латунная панель на лице: полуширина, полувысота
+
+def make_panel():
+    """Латунная панель лица: рамка, обод циферблата, тумблеры, ручки-обманки, лампочки, винтики.
+    Локально: z = 0 — к стенке, +z наружу; (0, 0) — ось ручки громкости."""
+    pw, ph = PANEL
+    m = ext(rrect(pw, ph, 3), 0, 2.4)
+    m += Manifold.batch_hull([ext(rrect(pw, ph, 3), 2.39, 2.4), ext(rrect(pw - 0.8, ph - 0.8, 2.4), 2.99, 3.0)]) - \
+        ext(rrect(pw - 2.4, ph - 2.4, 1.8), 2.3, 4)                                 # рамка с фаской
+    m += cyl(DIAL_R + 2.6, 0, 3.4) + cyl(DIAL_R + 2.6, 3.4, 4.2, r2=DIAL_R + 1.8)          # обод циферблата
+    m -= cyl(DIAL_R + P["fit"], -1, 5)
     for sx in (-1, 1):
-        m -= cyl(3.3, -1, 2.3, sx * ENC_SCR, 0)
+        m -= cyl(3.4, -1, 1.6, sx * ENC_SCR, 0)                                     # головки винтов держателя
+        for sy in (-1, 1):
+            m += sphere(1.2, sx * (pw - 3.4), sy * (ph - 3.4), 2.4, 12)             # винтики по углам
+        for x in (sx * 26.0, sx * 34.0):                                            # тумблеры
+            m += cyl(2.6, 2.4, 3.8, x, 8.0, seg=6) + cyl(1.7, 3.8, 5.0, x, 8.0, seg=16)
+            tip = np.array([x, 8.0 - 2.6, 5.0 + 5.6])
+            m += rod([x, 8.0, 4.8], tip, 0.85, 12) + sphere(1.2, *tip, seg=12)
+        m += sphere(2.0, sx * 26.0, -1.5, 2.4, 14) + sphere(2.0, sx * 34.0, -1.5, 2.4, 14)   # лампочки-обманки
+        kx = sx * 30.0                                                              # ручка-обманка
+        k = cyl(4.2, 2.4, 6.4, kx, -10.0, seg=36) + cyl(3.2, 6.4, 7.2, kx, -10.0, seg=36)
+        for t in range(16):
+            a = 2 * math.pi * t / 16
+            k -= cyl(0.55, 3.2, 6.5, kx + 4.4 * math.cos(a), -10.0 + 4.4 * math.sin(a), seg=8)
+        m += k
     return m
 
-def baluster_profile():
-    return [(0, 6.3), (2.5, 6.3), (3.8, 5.0), (5, 5.0), (6, 6.0), (7.5, 6.0), (8.5, 5.0), (10, 4.2), (16, 5.6), (21.5, 6.1),
-            (28, 5.5), (33, 4.4), (34.5, 4.2), (35.3, 5.0), (36.5, 5.0), (37.5, 6.0), (38.7, 6.0), (39.7, 5.0), (40.4, 5.0),
-            (41.7, 6.3), (Z_W1 - Z_PL - 0.3, 6.3)]
+def dial_ticks(r0, r1, n, z, h, long_every=5, arc=270.0, w=0.7):
+    t = []
+    for i in range(n):
+        a = math.radians(-arc / 2 + arc * i / (n - 1) - 90)
+        rr0 = r0 - (0.9 if i % long_every == 0 else 0)
+        c, sn = math.cos(a), math.sin(a)
+        nrm = np.array([-sn, c]) * w / 2
+        p0, p1 = np.array([c, sn]) * rr0, np.array([c, sn]) * r1
+        t.append(ext(poly([p0 + nrm, p0 - nrm, p1 - nrm, p1 + nrm]), z, z + h))
+    return union(t)
+
+def make_dial_face():
+    """Белый циферблат вокруг ручки: подсвечивается диодами модуля изнутри. Шкала 0–10 рисками.
+    Печать: спиной на стол, на высоте 3,2 мм — пауза и смена на чёрный (риски)."""
+    rk = P["m5enc"][3] / 2 + 1.5
+    m = cyl(DIAL_R, 0, 3.2) - cyl(rk, -1, 4)
+    return m + dial_ticks(DIAL_R - 3.6, DIAL_R - 1.0, 21, 3.2, 0.6)
 
 def make_column():
-    pr = baluster_profile()
-    pts = [(0.0, 0.0)] + [(r, z) for z, r in pr] + [(0.0, pr[-1][0])]
-    return poly(pts).revolve(48)
+    """Латунная колонна с каннелюрами (вместо балясины)."""
+    hc = Z_W1 - Z_PL - 0.3
+    prof = [(0, 6.3), (2.2, 6.3), (2.6, 5.7), (3.6, 5.7), (4.0, 5.2), (hc - 5.0, 5.2), (hc - 4.4, 5.8), (hc - 3.0, 5.8),
+            (hc - 2.4, 6.3), (hc, 6.3)]
+    m = poly([(0.0, 0.0)] + [(r, z) for z, r in prof] + [(0.0, hc)]).revolve(64)
+    fl = []
+    for k in range(12):
+        a = 2 * math.pi * k / 12
+        x, y = 5.55 * math.cos(a), 5.55 * math.sin(a)
+        fl.append(cyl(0.75, 5.5, hc - 6.0, x, y, seg=10) + sphere(0.75, x, y, 5.5, 8) + sphere(0.75, x, y, hc - 6.0, 8))
+    return m - union(fl)
 
 def make_foot():
-    return cyl(6.5, 0.0, 8.0 - Z_GND, r2=9.0, seg=48)
+    """Латунная ножка-«булка». Локально: z = 0 — стол, верх (фланец) — под основанием."""
+    hf = 8.0 - Z_GND
+    pr = [(0, 7.0), (1.5, 8.6), (4.0, 9.4), (6.5, 8.6), (hf - 2.8, 6.6), (hf - 2.0, 6.3), (hf - 1.2, 7.6), (hf, 7.6)]
+    return poly([(0.0, 0.0)] + [(r, z) for z, r in pr] + [(0.0, hf)]).revolve(64)
+
+def make_spiral_grille(R=17.0):
+    """Решётка-обманка со спиралью, как у динамика на картинке. Локально: спина на z = 0."""
+    m = cyl(R, 0, 1.2)
+    holes = []
+    for gx in np.arange(-R, R + 0.1, 2.2):
+        for gy in np.arange(-R, R + 0.1, 2.2):
+            if gx * gx + gy * gy < (R - 3.2) ** 2:
+                holes.append(cyl(0.65, -1, 2, gx, gy, seg=8))
+    m -= union(holes)
+    m += cyl(R, 0, 3.0) - cyl(R - 2.4, -1, 4)
+    m += cyl(R - 0.3, 3.0, 3.6, r2=R - 1.0) - cyl(R - 2.4, 2, 5)
+    arms = []
+    for k in range(8):
+        a0 = 2 * math.pi * k / 8
+        pl, prr = [], []
+        for r in np.linspace(2.5, R - 2.0, 16):
+            a = a0 + 0.075 * r
+            n = np.array([-math.sin(a), math.cos(a)]); c = np.array([r * math.cos(a), r * math.sin(a)])
+            pl.append(c + n * 0.75); prr.append(c - n * 0.75)
+        arms.append(ext(poly(prr + pl[::-1]), 0, 2.4))
+    m += union(arms) + cyl(3.0, 0, 3.0) + sphere(1.6, 0, 0, 3.0, 14)
+    return m
+
+def make_gear(R, teeth, t=2.4):
+    """Шестерёнка-накладка со спицами. Локально: спина на z = 0."""
+    pts = []
+    for i in range(teeth):
+        a = 2 * math.pi * i / teeth; s = 2 * math.pi / teeth
+        for f, rr in ((0.0, R - 1.6), (0.18, R), (0.5, R), (0.68, R - 1.6)):
+            pts.append((rr * math.cos(a + f * s), rr * math.sin(a + f * s)))
+    m = ext(poly(pts), 0, t)
+    ri, ro = 3.4, R - 3.2
+    if ro - ri > 2.5:
+        for k in range(5):
+            a0, a1 = 2 * math.pi * k / 5 + 0.22, 2 * math.pi * (k + 1) / 5 - 0.22
+            win = [(ri * math.cos(a), ri * math.sin(a)) for a in np.linspace(a0, a1, 6)] + \
+                  [(ro * math.cos(a), ro * math.sin(a)) for a in np.linspace(a1, a0, 10)]
+            m -= ext(poly(win), -1, t + 1)
+    m += cyl(3.0, 0, t + 1.4) + sphere(1.4, 0, 0, t + 1.4, 12)
+    return m
+
+def make_tank():
+    """Латунный бак (половинка капсулы) с обручами и патрубками. Локально: ось вдоль v, u = 0."""
+    r, v0, v1 = 6.0, 25.0, 45.0
+    zc = r * 0.35
+    m = rod([0, v0 + r, zc], [0, v1 - r, zc], r, 40) + sphere(r, 0, v0 + r, zc, 32) + sphere(r, 0, v1 - r, zc, 32)
+    for v in (v0 + 5.5, (v0 + v1) / 2, v1 - 5.5):
+        m += rod([0, v - 0.8, zc], [0, v + 0.8, zc], r + 0.6, 40)
+    m += rod([0, v1 - 1, zc], [0, v1 + 2.6, zc], 1.6, 16)                    # патрубок вверх к манометру
+    m += rod([0, v0 + 1, zc], [0, v0 - 2.0, zc], 1.8, 16)                    # патрубок вниз к трубе
+    return flat_back(m)
+
+def make_gauge():
+    """Корпус манометра: латунь, гнездо под белый циферблат. Локально: спина на z = 0."""
+    m = cyl(6.0, 0, 3.6) + cyl(6.0, 3.6, 4.4, r2=5.4)
+    m -= cyl(4.6, 3.0, 5)
+    return m
+
+def make_gauge_face():
+    m = cyl(4.45, 0, 1.2)
+    return m + dial_ticks(2.6, 4.0, 11, 1.2, 0.5, long_every=5, w=0.5) + ext(poly([(-0.35, 0), (0.35, 0), (1.8, 3.0), (1.5, 3.2)]), 1.2, 1.7)
+
+PIPE_R = 2.2
+def make_pipes():
+    """Медные трубы-накладки правого бока (плоская спина). Локально: u — вдоль бока (мир Y), v — высота (мир Z)."""
+    zc = PIPE_R * 0.55
+    path = [(-39.0, 57.5), (-39.0, 20.8), (39.5, 20.8), (39.5, 40.0), (39.0, 40.0)]
+    pts = [np.array([u, v, zc]) for u, v in path]
+    parts = [rod(a, b, PIPE_R) for a, b in zip(pts, pts[1:])] + [sphere(PIPE_R, *p, seg=20) for p in pts]
+    top = [np.array([-39.0, 57.5, zc]), np.array([-2.5, 57.5, zc])]
+    parts += [rod(*top, PIPE_R), sphere(PIPE_R, *top[1], seg=20)]
+    parts.append(rod([30.0, 20.8, zc], [30.0, 22.6, zc], PIPE_R))              # к баку снизу
+    parts.append(rod([39.0, 40.0, zc], [36.9, 40.0, zc], 1.6))                 # к баку сбоку
+    for u, v, horiz in ((-25, 20.8, True), (5, 20.8, True), (-39, 40, False), (-31, 57.5, True), (39.5, 30, False)):
+        a = np.array([u - 1.2, v, zc]) if horiz else np.array([u, v - 1.2, zc])
+        b = np.array([u + 1.2, v, zc]) if horiz else np.array([u, v + 1.2, zc])
+        parts.append(rod(a, b, PIPE_R + 0.7))                                     # муфты
+    parts.append(cyl(1.0, zc, zc + PIPE_R + 2.2, -39.0, 31.0) + cyl(3.0, zc + PIPE_R + 2.2, zc + PIPE_R + 3.0, -39.0, 31.0))  # вентиль
+    return flat_back(union(parts))
+
+def make_bulb_socket():
+    return cyl(3.6, 0, 1.6, seg=32) + cyl(2.9, 1.6, 6.0, seg=32) + cyl(3.3, 3.2, 4.2, seg=32) - cyl(1.4, 2.0, 7, seg=16)
+
+def make_bulb():
+    """Лампа Эдисона (прозрачный пластик). Локально: цоколь вниз, штырь в патрон."""
+    pr = [(0, 2.6), (2.5, 2.6), (3.2, 2.4), (5.5, 3.6), (9.0, 4.6), (12.5, 4.4), (15.0, 3.2), (16.6, 1.6), (17.2, 0.0)]
+    m = poly([(0.0, 0.0)] + [(r, z) for z, r in pr]).revolve(48)
+    return m + cyl(1.25, -2.0, 0.2, seg=16)
+
+def make_soundbox():
+    """Мембранная коробка на конце тонарма: диск с розеткой. Локально: спина на z = 0."""
+    m = cyl(6.0, 0, 2.4, seg=48) + (cyl(6.0, 2.4, 3.2, seg=48) - cyl(5.0, 2, 4, seg=48))
+    for k in range(6):
+        a = 2 * math.pi * k / 6
+        m -= ext(CrossSection.circle(1.25, 16).translate([3.0 * math.cos(a), 3.0 * math.sin(a)]), 1.6, 3)
+    m += cyl(1.5, 2.4, 3.2, seg=16)
+    return m
+
+def make_rim():
+    """Латунный обод вокруг диска."""
+    zt = Z_TOP + PLAT_T
+    m = cyl(43.4, Z_TOP, zt + 0.2, seg=128) + cyl(43.4, zt + 0.2, zt + 0.8, r2=42.8, seg=128)
+    return m - cyl(PLAT_R + P["fit"], Z_TOP - 1, zt + 2, seg=128)
 
 def cup_holes(m, z0, z1):
     for a in EARS:
@@ -454,7 +615,28 @@ def bell_local():
     outer = loft([ring(z, False) for z in zs])
     zi = np.concatenate([[-1.0], zs[1:], [BELL_L + 1.0]])
     inner = loft([ring(min(max(z, 0.0), BELL_L), True) + np.array([0, 0, z - min(max(z, 0.0), BELL_L)]) for z in zi])
-    return outer - inner - cyl(SPIG_R + P["fit"], -1.0, SPIG_L + 0.3)
+    m = outer - inner - cyl(SPIG_R + P["fit"], -1.0, SPIG_L + 0.3)
+    def rad(z, a):
+        t = max(0.0, (z - neck) / (BELL_L - neck))
+        r = TUBE_R + (BELL_R - TUBE_R) * (math.exp(kexp * t) - 1) / (math.exp(kexp) - 1)
+        return r * (1 + 0.09 * t * t * abs(math.sin(4 * a)) ** 0.7)
+    deco = []
+    for k in range(8):                                            # швы по впадинам лепестков + заклёпки
+        a = math.pi / 4 * k
+        c, sn = math.cos(a), math.sin(a)
+        zs_ = np.linspace(neck + 2, BELL_L - 0.8, 22)
+        pts = [(rad(z, a) - 0.25) * np.array([c, sn, 0]) + np.array([0, 0, z]) for z in zs_]
+        for p, q in zip(pts, pts[1:]):
+            deco.append(Manifold.batch_hull([sphere(0.55, *p, seg=8), sphere(0.55, *q, seg=8)]))
+        for z in np.arange(neck + 6, BELL_L - 2, 6.5):
+            for da in (-0.11, 0.11):
+                aa = a + da * (TUBE_R + 6) / max(rad(z, a), 1)
+                deco.append(sphere(0.7, *((rad(z, aa) - 0.15) * np.array([math.cos(aa), math.sin(aa), 0]) + np.array([0, 0, z])), seg=10))
+    for z, nn in ((BELL_L - 3.0, 48), (neck + 1.5, 16)):          # пояса заклёпок у устья и у горла
+        for i in range(nn):
+            aa = 2 * math.pi * (i + 0.5) / nn
+            deco.append(sphere(0.7, *((rad(z, aa) - 0.15) * np.array([math.cos(aa), math.sin(aa), 0]) + np.array([0, 0, z])), seg=10))
+    return m + union(deco)
 
 def make_bell():
     p0, e, ax, u, v = horn_frames()
@@ -466,10 +648,10 @@ def make_arm():
     d = (C - H) / np.linalg.norm(C - H)
     head = C - d * 37.0
     n = np.array([-d[1], d[0]])
-    s0, s1 = H + d * (TUBE_R + 1.5), head
-    beam = poly([s0 + n * 3.0, s0 - n * 3.0, s1 - n * 3.0, s1 + n * 3.0])
-    m = ext(beam, z0, z1) + cyl(TUBE_R + 3.0, z0, z1, H[0], H[1]) + cyl(6.5, z0, z1, head[0], head[1])
-    m += cyl(5.0, z1, z1 + 1.0, head[0], head[1]) + cyl(2.5, z1 + 1.0, z1 + 2.0, head[0], head[1])
+    s0, s1 = H + d * (TUBE_R + 1.5), head - d * 1.6
+    beam = poly([s0 + n * 2.6, s0 - n * 2.6, s1 - n * 2.6, s1 + n * 2.6])
+    m = ext(beam, z0, z1 - 1.5) + cyl(TUBE_R + 3.0, z0, z1, H[0], H[1])
+    m += cyl(TUBE_R + 3.6, z1 - 1.2, z1, H[0], H[1])
     return m - cyl(TUBE_R + 0.2, z0 - 1, z1 + 1, H[0], H[1])
 
 # ------------------------------------------------------------------ макеты покупных деталей (для проверки места)
@@ -512,7 +694,7 @@ def ghosts():
 
 
 # ------------------------------------------------------------------ сборка
-COL = dict(brown="#5c2019", gold="#c9a24a", black="#1c1c1e", white="#f2efe6", gray="#8d8f94", pcb="#2f7d4f")
+COL = dict(brown="#4a1a14", gold="#c9a24a", black="#1c1c1e", white="#f2efe6", gray="#8d8f94", pcb="#2f7d4f", copper="#b8693e", clear="#f6e7c1")
 
 def build():
     """→ список деталей: имя, название, цвет, тело в сборке, вектор разнесения, поворот для печати."""
@@ -524,16 +706,35 @@ def build():
     add("base", "Основание", "brown", make_base(), (0, 0, -70))
     col, foot = make_column(), make_foot()
     for i, (sx, sy) in enumerate([(-1, -1), (1, -1), (1, 1), (-1, 1)]):
-        add(f"column{i+1}", "Балясина", "brown", col.translate([sx * COLP, sy * COLP, Z_PL + 0.15]), (sx * 35, sy * 35, 0), (0, 0, 0), "column")
-        add(f"foot{i+1}", "Ножка", "brown", foot.translate([sx * (HB - 6), sy * (HB - 6), Z_GND]), (0, 0, -92), None, "foot")
+        add(f"column{i+1}", "Колонна с каннелюрами", "gold", col.translate([sx * COLP, sy * COLP, Z_PL + 0.15]), (sx * 35, sy * 35, 0), (0, 0, 0), "column")
+        add(f"foot{i+1}", "Ножка-«булка»", "gold", foot.translate([sx * (HB - 6), sy * (HB - 6), Z_GND]), (0, 0, -92), None, "foot")
     add("cup", "Световой стакан", "white", make_cup().translate([cx, cy, DZ]), (0, 0, -18))
     add("retainer", "Прижим кольца", "white", make_retainer().translate([cx, cy, DZ]), (0, 0, -38))
     add("hub", "Гнездо пластинки", "black", make_hub().translate([cx, cy, 0]), (0, 0, 50))
     add("diffuser", "Рассеиватель", "white", make_diffuser().translate([cx, cy, 0]), (0, 0, 36), (180, 0, 0))
     add("platter", "Диск-платтер", "black", make_platter().translate([cx, cy, 0]), (0, 0, 22))
+    add("rim", "Латунный обод диска", "gold", make_rim().translate([cx, cy, 0]), (0, 0, 14))
     # ручка громкости с подсветкой на лице
     add("enc_holder", "Держатель ручки", "white", xf(make_enc_holder(), [(-1, 0, 0), (0, 0, 1), (0, 1, 0)], (0, -HB, ENC_Z)), (0, 30, 0), None, "enc_holder")
-    add("bezel", "Накладка ручки", "gold", xf(make_bezel(), [(1, 0, 0), (0, 0, 1), (0, -1, 0)], (0, -HB, ENC_Z)), (0, -30, 0), None, "bezel")
+    FRONT = [(1, 0, 0), (0, 0, 1), (0, -1, 0)]
+    add("panel", "Латунная панель лица", "gold", xf(make_panel(), FRONT, (0, -HB, ENC_Z)), (0, -34, 0), None, "panel")
+    add("dial", "Циферблат ручки", "white", xf(make_dial_face(), FRONT, (0, -HB, ENC_Z)), (0, -50, 0), None, "dial")
+    # правый бок: решётка, шестерни, бак, манометр, трубы
+    RIGHT = [(0, 1, 0), (0, 0, 1), (1, 0, 0)]
+    LEFT = [(0, -1, 0), (0, 0, 1), (-1, 0, 0)]
+    g = make_spiral_grille(15.5)
+    add("grille_r", "Спиральная решётка", "gold", xf(g.translate([-19.5, 39.5, 0]), RIGHT, (HB, 0, 0)), (28, 0, 0), None, "grille")
+    add("grille_l", "Спиральная решётка", "gold", xf(g.translate([0.0, 39.5, 0]), LEFT, (-HB, 0, 0)), (-28, 0, 0), None, "grille")
+    add("gear1", "Шестерня большая", "gold", xf(make_gear(10.0, 16).translate([11.0, 48.5, 0]), RIGHT, (HB, 0, 0)), (34, 0, 0), None, "gear1")
+    add("gear2", "Шестерня малая", "gold", xf(make_gear(7.5, 12).translate([14.0, 31.0, 0]), RIGHT, (HB, 0, 0)), (34, 0, 0), None, "gear2")
+    add("tank", "Бак", "gold", xf(make_tank().translate([30.0, 0, 0]), RIGHT, (HB, 0, 0)), (30, 0, 0), None, "tank")
+    add("gauge", "Манометр", "gold", xf(make_gauge().translate([30.0, 54.0, 0]), RIGHT, (HB, 0, 0)), (40, 0, 0), None, "gauge")
+    add("gauge_face", "Циферблат манометра", "white", xf(make_gauge_face().translate([30.0, 54.0, 3.0]), RIGHT, (HB, 0, 0)), (48, 0, 0), None, "gauge_face")
+    add("pipes", "Медные трубы", "copper", xf(make_pipes(), RIGHT, (HB, 0, 0)), (22, 0, 0), None, "pipes")
+    # лампы Эдисона на деке справа
+    for i, by in enumerate((-32.0, -20.0, -8.0)):
+        add(f"socket{i+1}", "Патрон лампы", "gold", make_bulb_socket().translate([48.0, by, Z_TOP]), (0, 0, 26), None, "socket")
+        add(f"bulb{i+1}", "Лампа Эдисона", "clear", make_bulb().translate([48.0, by, Z_TOP + 6.0]), (0, 0, 44), None, "bulb")
     w, h, d, kd = P["m5enc"]
     add("enc_cap", "Крышка держателя ручки", "white", xf(make_enc_cap(), [(-1, 0, 0), (0, 0, 1), (0, 1, 0)], (0, -HB + P["wall"] + 1.6 + d, ENC_Z)), (0, 46, 0), None, "enc_cap")
     # крепёж электроники
@@ -547,6 +748,10 @@ def build():
     add("exc_cage", "Ограничитель вибродинамика", "gray", make_exc_cage().translate([EXC[0], EXC[1], Z_FLOOR + P["exc"][1] + 2.0]), (0, 0, -40), None, "exc_cage")
     add("riser", "Стойка трубы", "gold", make_riser(), (0, 0, 38), (180, 0, 0))
     add("arm", "Тонарм", "gold", make_arm(), (0, 0, 66))
+    dd = (C - H) / np.linalg.norm(C - H); head = C - dd * 37.0
+    sb = make_soundbox().translate([0, 0, -1.6])
+    nrm = np.array([dd[0], dd[1], 0.0]); side = np.array([-dd[1], dd[0], 0.0])
+    add("soundbox", "Мембранная коробка", "gold", xf(sb, [side, (0, 0, 1), nrm], (head[0], head[1], Z_TOP + 11.6)), (0, 0, 76), None, "soundbox")
     add("elbow", "Колено трубы", "gold", make_elbow(), (0, 0, 88))
     add("bell", "Раструб", "gold", make_bell(), (-38, -38, 140), None, "bell")
     return parts
@@ -556,7 +761,11 @@ def build_height():
 
 LOCAL = dict(column=make_column, enc_cap=make_enc_cap,
              foot=lambda: make_foot().rotate([180, 0, 0]),
-             bezel=lambda: make_bezel().rotate([180, 0, 0]),
+             panel=make_panel, dial=make_dial_face, grille=lambda: make_spiral_grille(15.5),
+             gear1=lambda: make_gear(10.0, 16), gear2=lambda: make_gear(7.5, 12),
+             tank=make_tank, gauge=make_gauge, gauge_face=make_gauge_face, pipes=make_pipes,
+             socket=make_bulb_socket, bulb=lambda: make_bulb().translate([0, 0, 2.0]), soundbox=make_soundbox,
+             rim=lambda: make_rim(),
              enc_holder=lambda: make_enc_holder().rotate([180, 0, 0]),
              esp_cap=lambda: make_esp_cap().rotate([180, 0, 0]),
              sd_clamp=lambda: make_sd_clamp().rotate([180, 0, 0]),
@@ -625,10 +834,14 @@ def pack(items, gap=5.0, margin=6.0):
 
 PLATES = [
     ("1_korpus_brown", ["body"]),
-    ("2_osnovanie_brown", ["base", "column", "column", "column", "column", "foot", "foot", "foot", "foot"]),
-    ("3_truba_gold", ["bell", "riser", "elbow", "arm", "bezel"]),
-    ("4_disk_black", ["platter", "hub", "exc_cage", "esp_cap", "esp_cap", "amp_clamp", "dac_clamp", "sd_clamp"]),
-    ("5_svet_white", ["cup", "retainer", "diffuser", "enc_holder", "enc_cap"]),
+    ("2_osnovanie_brown", ["base"]),
+    ("3_truba_gold", ["bell", "riser", "elbow", "arm", "soundbox"]),
+    ("4_dekor_gold", ["rim", "panel", "grille", "grille", "gear1", "gear2", "tank", "gauge", "socket", "socket", "socket",
+                      "column", "column", "column", "column", "foot", "foot", "foot", "foot"]),
+    ("5_disk_black", ["platter", "hub", "exc_cage", "esp_cap", "esp_cap", "amp_clamp", "dac_clamp", "sd_clamp"]),
+    ("6_svet_white", ["cup", "retainer", "diffuser", "enc_holder", "enc_cap", "dial", "gauge_face"]),
+    ("7_truby_copper", ["pipes"]),
+    ("8_lampy_clear", ["bulb", "bulb", "bulb"]),
 ]
 
 def main():
