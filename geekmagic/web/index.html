@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121214">
+<title>Экран GeekMagic</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png">
+<style>
+  :root {
+    --bg: #f4f4f6; --card: #ffffff; --ink: #18181b; --muted: #6b6b76;
+    --line: #e3e3e8; --accent: #e8900c; --accent-ink: #1a1207; --ok: #1f8a4c; --err: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121214; --card: #1c1c20; --ink: #f2f2f4; --muted: #9a9aa6;
+            --line: #2c2c33; --accent: #ffaa28; --accent-ink: #1a1207; --ok: #4cc27f; --err: #ff6b5e; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 16px 16px 48px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  .pill { font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px;
+          padding: 4px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+  .pill.ok { color: var(--ok); border-color: currentColor; }
+  .pill.err { color: var(--err); border-color: currentColor; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+  .screen { width: 240px; height: 240px; max-width: 100%; margin: 0 auto 14px; border-radius: 10px;
+            background: #000; border: 10px solid #26262b; box-sizing: content-box; overflow: hidden;
+            display: grid; place-items: center; color: #666; font-size: 13px; }
+  .screen img { width: 240px; height: 240px; object-fit: cover; display: block; }
+  .screen.fit img { object-fit: contain; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 0; min-width: 0; }
+  button, .btn { appearance: none; border: 1px solid var(--line); background: transparent; color: var(--ink);
+                 font: inherit; font-weight: 600; border-radius: 12px; padding: 12px 14px; cursor: pointer;
+                 text-align: center; min-height: 46px; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 10px 0; }
+  .seg button { border: 0; border-radius: 0; flex: 1; font-weight: 500; min-height: 40px; padding: 8px; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  textarea { width: 100%; min-height: 84px; resize: vertical; border: 1px solid var(--line); border-radius: 12px;
+             padding: 10px 12px; font: inherit; background: transparent; color: var(--ink); }
+  label.inline { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+  input[type=color] { width: 44px; height: 36px; border: 1px solid var(--line); border-radius: 8px; background: none; padding: 2px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  input[type=file] { display: none; }
+  .themes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .themes button { font-weight: 500; font-size: 14px; min-height: 42px; padding: 8px; }
+  .hint { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: calc(100% - 32px);
+           background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px;
+           opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+  .drop { outline: 2px dashed var(--accent); outline-offset: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Экран GeekMagic</h1>
+    <span id="status" class="pill">подключаюсь…</span>
+  </header>
+
+  <section id="pic">
+    <h2>Картинка или GIF</h2>
+    <div id="screen" class="screen"><span>сейчас на экране</span></div>
+    <div class="seg" role="group" aria-label="Как уложить картинку">
+      <button data-fit="fill" aria-pressed="true">Заполнить</button>
+      <button data-fit="fit" aria-pressed="false">Вписать целиком</button>
+    </div>
+    <div class="row">
+      <label class="btn" for="gallery">Из галереи</label>
+      <label class="btn" for="camera">Камера</label>
+      <button id="paste">Из буфера</button>
+    </div>
+    <input id="gallery" type="file" accept="image/*">
+    <input id="camera" type="file" accept="image/*" capture="environment">
+    <p class="hint">Выбранная картинка сразу уходит на экран. Можно и «Поделиться → Экран GeekMagic» из галереи,
+      если страница установлена на телефон.</p>
+  </section>
+
+  <section>
+    <h2>Текст</h2>
+    <textarea id="text" placeholder="Например: Не беспокоить 🎧"></textarea>
+    <div class="row" style="margin-top:10px; align-items:center">
+      <label class="inline">Текст <input id="fg" type="color" value="#ffffff"></label>
+      <label class="inline">Фон <input id="bg" type="color" value="#000000"></label>
+      <button id="sendText" class="primary">На экран</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Яркость: <span id="brtVal">—</span></h2>
+    <input id="brt" type="range" min="0" max="100" step="5" value="50">
+  </section>
+
+  <section>
+    <h2>Встроенные экраны</h2>
+    <div class="themes" id="themes"></div>
+  </section>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const token = new URLSearchParams(location.search).get('token') || localStorageGet('gmtv-token');
+if (token) localStorageSet('gmtv-token', token);
+let fit = localStorageGet('gmtv-fit') || 'fill';
+
+function localStorageGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+function api(path, opts = {}) {
+  opts.headers = Object.assign({}, opts.headers, token ? { 'X-Token': token } : {});
+  return fetch(path, opts).then(async (r) => {
+    const data = r.headers.get('content-type')?.includes('json') ? await r.json() : null;
+    if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+    return data;
+  });
+}
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function busy(on) { document.querySelectorAll('button, .btn').forEach((b) => b.style.pointerEvents = on ? 'none' : ''); }
+function refreshPreview() {
+  const img = new Image();
+  img.onload = () => { $('#screen').replaceChildren(img); };
+  img.src = '/api/last?t=' + Date.now() + (token ? '&token=' + encodeURIComponent(token) : '');
+}
+
+async function pushBlob(blob, name) {
+  busy(true); toast('Отправляю…');
+  const fd = new FormData(); fd.append('file', blob, name || 'image');
+  try {
+    const r = await api('/api/push?fit=' + fit, { method: 'POST', body: fd });
+    toast('На экране ✓ (' + Math.round(r.bytes / 1024) + ' КБ)'); refreshPreview();
+  } catch (e) { toast('Ошибка: ' + e.message); }
+  busy(false);
+}
+
+for (const id of ['#gallery', '#camera']) {
+  $(id).addEventListener('change', (e) => {
+    const f = e.target.files[0]; if (f) pushBlob(f, f.name); e.target.value = '';
+  });
+}
+$('#paste').addEventListener('click', async () => {
+  try {
+    for (const item of await navigator.clipboard.read()) {
+      const type = item.types.find((t) => t.startsWith('image/'));
+      if (type) return pushBlob(await item.getType(type), 'clipboard');
+    }
+    toast('В буфере нет картинки');
+  } catch { toast('Буфер недоступен: нужен https или localhost'); }
+});
+document.querySelectorAll('.seg button').forEach((b) => {
+  b.setAttribute('aria-pressed', String(b.dataset.fit === fit));
+  b.addEventListener('click', () => {
+    fit = b.dataset.fit; localStorageSet('gmtv-fit', fit);
+    document.querySelectorAll('.seg button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  });
+});
+const pic = $('#pic');
+pic.addEventListener('dragover', (e) => { e.preventDefault(); pic.classList.add('drop'); });
+pic.addEventListener('dragleave', () => pic.classList.remove('drop'));
+pic.addEventListener('drop', (e) => {
+  e.preventDefault(); pic.classList.remove('drop');
+  const f = e.dataTransfer.files[0]; if (f) pushBlob(f, f.name);
+});
+document.addEventListener('paste', (e) => {
+  const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith('image/'));
+  if (f) pushBlob(f, f.name);
+});
+
+$('#sendText').addEventListener('click', async () => {
+  const text = $('#text').value.trim(); if (!text) return toast('Введите текст');
+  busy(true);
+  try {
+    await api('/api/text', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, fg: $('#fg').value, bg: $('#bg').value }) });
+    toast('На экране ✓'); refreshPreview();
+  } catch (e) { toast('Ошибка: ' + e.message); }
+  busy(false);
+});
+
+const brt = $('#brt');
+brt.addEventListener('input', () => $('#brtVal').textContent = brt.value + '%');
+brt.addEventListener('change', () => api('/api/brightness?value=' + brt.value)
+  .then(() => toast('Яркость ' + brt.value + '%')).catch((e) => toast('Ошибка: ' + e.message)));
+
+async function loadInfo() {
+  const s = $('#status');
+  try {
+    const info = await api('/api/info');
+    const v = info.version || {};
+    const free = info.space && info.space.free ? ' · свободно ' + Math.round(info.space.free / 1024) + ' КБ' : '';
+    s.textContent = (v.v || v.m || 'часы на связи') + free; s.className = 'pill ok';
+    const b = parseInt(info.brightness && info.brightness.brt, 10);
+    if (!isNaN(b)) { brt.value = Math.max(0, Math.min(100, b)); $('#brtVal').textContent = brt.value + '%'; }
+    const box = $('#themes'); box.replaceChildren();
+    const current = info.app && Number(info.app.theme);
+    for (const [n, name] of Object.entries(info.themes || {})) {
+      const btn = document.createElement('button'); btn.textContent = name;
+      if (Number(n) === current) btn.classList.add('primary');
+      btn.addEventListener('click', () => api('/api/theme?value=' + n)
+        .then(() => { toast(name); loadInfo(); }).catch((e) => toast('Ошибка: ' + e.message)));
+      box.append(btn);
+    }
+    if (info.history && info.history.length) refreshPreview();
+  } catch (e) { s.textContent = 'нет связи: ' + e.message; s.className = 'pill err'; }
+}
+
+const shared = new URLSearchParams(location.search).get('shared');
+if (shared) { toast(shared === 'ok' ? 'На экране ✓' : 'Не получилось отправить'); history.replaceState(null, '', '/'); }
+loadInfo();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+</script>
+</body>
+</html>

@@ -1,0 +1,2 @@
+pillow>=9.4
+# pillow-heif  # раскомментируйте для фото HEIC с iPhone
