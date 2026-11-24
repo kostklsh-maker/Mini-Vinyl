@@ -30,6 +30,8 @@ ELEC = [  # № на модели, ключ макета, короткая по�
          where="задняя стенка, нижняя полка «этажерки»", pins="BCK 26 · LCK 25 · DIN 27 · SCK→GND · 5 В"),
     dict(key="e_sd", short="microSD", name="Модуль карты памяти", mark="Micro SD SPI mini", qty=1,
          where="задняя стенка, над ЦАП", pins="CS 5 · SCK 18 · MOSI 23 · MISO 19"),
+    dict(key="e_disc", short="Пластинка", name="NFC-пластинка (ваша)", mark="Ø50 × 0,6–0,8 мм, метка NFC 13,56 МГц", qty=1,
+         where="в гнезде Ø56: вокруг светится зазор 3 мм", pins="— (читается PN532 сквозь центр)"),
     dict(key=None, short="", name="Карта памяти", mark="microSD 16–32 ГБ, FAT32", qty=1,
          where="в модуле microSD, щель в задней стенке", pins="—"),
     dict(key=None, short="", name="Конденсатор", mark="1000 мкФ 16 В", qty=1,

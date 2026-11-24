@@ -22,7 +22,9 @@ P = dict(
     fit=0.15,                 # посадочный зазор на сторону (как в Findypet)
     wall=2.4,                 # стенка корпуса
     # --- пластинка и NFC ---
-    disc_d=50.0, disc_t=1.0,  # NFC-пластинка
+    disc_d=50.0, disc_t=0.8,  # NFC-пластинка: диаметр, толщина (0,6–0,8 мм)
+    disc_gap=3.0,             # светящийся зазор вокруг пластинки в гнезде, на сторону
+    disc_sink=0.4,            # насколько пластинка утоплена ниже края гнезда
     pn532=(43.0, 41.0, 4.5),  # плата PN532 V3: длина, ширина, высота с деталями
     ring_od=66.0, ring_id=52.0, ring_pcb=1.6,   # кольцо WS2812B на 24 диода
     # --- звук ---
@@ -520,10 +522,10 @@ def make_cup():
         m += cyl(5.5, 77.0, 79.0, EAR_R * math.cos(math.radians(a)), EAR_R * math.sin(math.radians(a)))
     m = cup_holes(m, 76.0, 80.0)
     cav = poly([(ro - 7.5, 76.9), (ro + 0.6, 76.9), (ro + 0.6, 81.0), (ro - 0.6, 82.2), (ro - 0.6, 85.0),
-                (33.5, 86.1), (33.5, 93.0), (30.5, 93.0), (30.5, 87.8), (ro - 7.5, 82.8)]).revolve(96)
+                (33.5, 86.1), (33.5, 93.0), (26.0, 93.0), (26.0, 85.0), (ro - 7.5, 82.8)]).revolve(96)
     m -= cav
     for k in range(6):
-        m += box(29.0, -0.6, 84.4, 34.5, 0.6, 89.6).rotate([0, 0, 15 + 60 * k])
+        m += box(25.5, -0.6, 84.4, 34.5, 0.6, 89.6).rotate([0, 0, 15 + 60 * k])
     m -= box(-pl / 2 - 0.5, -pw / 2 - 0.5, ZT - ph, pl / 2 + 0.5, pw / 2 + 0.5, ZT + 1)
     m -= box(-12, -pw / 2 + 2, 76.0, 12, -pw / 2 + 7, ZT - ph + 0.5)       # окно для проводов PN532
     return m
@@ -541,19 +543,23 @@ def make_retainer():
     m -= box(-4, ro - 3, 73.0, 4, ro + 1, 80.0)                               # вывод проводов кольца
     return m
 
+def disc_floor():
+    """Высота дна гнезда: на ней лежит пластинка."""
+    return Z_TOP + PLAT_T - P["disc_t"] - P["disc_sink"]
+
 def make_hub():
-    """Центр платтера с гнездом пластинки."""
-    rd = P["disc_d"] / 2 + 0.3
-    zt = Z_TOP + PLAT_T
-    m = cyl(30.25, Z_TOP, zt)
-    m -= cyl(rd, zt - P["disc_t"] - 0.2, zt + 1)
-    m -= (cyl(8.0, zt - 2.6, zt + 1, 0, -23.0) ^ cyl(29.2, Z_TOP, zt + 1))    # вырез под палец
-    return m
+    """Чёрный центр под пластинкой: пластинка лежит на нём, NFC читает сквозь него."""
+    return cyl(P["disc_d"] / 2 + 0.2, Z_TOP, disc_floor(), seg=96)
 
 def make_diffuser():
-    """Рассеиватель светового кольца (белый)."""
-    zt = Z_TOP + PLAT_T
-    return (cyl(33.9, Z_TOP, zt) - cyl(30.4, Z_TOP - 1, zt + 1)) - (cyl(33.3, Z_TOP - 1, zt - 0.8) - cyl(31.0, Z_TOP - 2, zt))
+    """Белое световое кольцо: светящийся зазор 3 мм вокруг пластинки (дно гнезда) и кольцо до диска.
+    Снизу полое: свет диодов идёт по каналу стакана и светит сквозь тонкий (0,8 мм) потолок."""
+    zt, zf = Z_TOP + PLAT_T, disc_floor()
+    r0, rg, ro = P["disc_d"] / 2 + 0.35, P["disc_d"] / 2 + P["disc_gap"], 33.9
+    m = (cyl(ro, Z_TOP, zf, seg=128) - cyl(r0, Z_TOP - 1, zf + 1, seg=128)) + (cyl(ro, zf, zt, seg=128) - cyl(rg, zf - 1, zt + 1, seg=128))
+    m -= cyl(ro - 0.6, Z_TOP - 1, zf - 0.8, seg=128) - cyl(r0 + 0.6, Z_TOP - 2, zf, seg=128)
+    m -= cyl(ro - 0.6, Z_TOP - 1, zt - 0.8, seg=128) - cyl(rg + 0.6, Z_TOP - 2, zt, seg=128)
+    return m
 
 def make_platter():
     """Внешнее кольцо платтера с «канавками» винила."""
@@ -660,6 +666,7 @@ def ghosts():
     g = []
     cx, cy = C; y1 = WIN - 0.5
     pl, pw, ph = P["pn532"]
+    g.append(("e_disc", "NFC-пластинка", cyl(P["disc_d"] / 2, disc_floor(), disc_floor() + P["disc_t"], cx, cy, seg=96), (0, 0, 92)))
     g.append(("e_pn532", "PN532", box(cx - pl / 2, cy - pw / 2, Z_TOP - ph + 0.2, cx + pl / 2, cy + pw / 2, Z_TOP - 0.1), (0, 0, 62)))
     ring = cyl(P["ring_od"] / 2, 79.4, 79.4 + P["ring_pcb"]) + cyl(P["ring_od"] / 2 - 1, 81.0, 82.6)
     g.append(("e_ring", "Кольцо WS2812", (ring - cyl(P["ring_id"] / 2, 78, 84)).translate([cx, cy, DZ]), (0, 0, -30)))
@@ -710,8 +717,8 @@ def build():
         add(f"foot{i+1}", "Ножка-«булка»", "gold", foot.translate([sx * (HB - 6), sy * (HB - 6), Z_GND]), (0, 0, -92), None, "foot")
     add("cup", "Световой стакан", "white", make_cup().translate([cx, cy, DZ]), (0, 0, -18))
     add("retainer", "Прижим кольца", "white", make_retainer().translate([cx, cy, DZ]), (0, 0, -38))
-    add("hub", "Гнездо пластинки", "black", make_hub().translate([cx, cy, 0]), (0, 0, 50))
-    add("diffuser", "Рассеиватель", "white", make_diffuser().translate([cx, cy, 0]), (0, 0, 36), (180, 0, 0))
+    add("hub", "Центр под пластинкой", "black", make_hub().translate([cx, cy, 0]), (0, 0, 50))
+    add("diffuser", "Световое кольцо гнезда", "white", make_diffuser().translate([cx, cy, 0]), (0, 0, 36))
     add("platter", "Диск-платтер", "black", make_platter().translate([cx, cy, 0]), (0, 0, 22))
     add("rim", "Латунный обод диска", "gold", make_rim().translate([cx, cy, 0]), (0, 0, 14))
     # ручка громкости с подсветкой на лице
