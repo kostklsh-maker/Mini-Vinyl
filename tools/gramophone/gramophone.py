@@ -24,7 +24,8 @@ P = dict(
     # --- пластинка и NFC ---
     disc_d=50.0, disc_t=0.8,  # NFC-пластинка: диаметр, толщина (0,6–0,8 мм)
     disc_gap=3.0,             # светящийся зазор вокруг пластинки в гнезде, на сторону
-    disc_sink=0.4,            # насколько пластинка утоплена ниже края гнезда
+    disc_lift=0.8,            # пластинка лежит на столике на столько выше края гнезда
+    disc_over=3.0,            # и свисает за столик на столько со всех сторон — за этот край её берут
     pn532=(43.0, 41.0, 4.5),  # плата PN532 V3: длина, ширина, высота с деталями
     ring_od=66.0, ring_id=52.0, ring_pcb=1.6,   # кольцо WS2812B на 24 диода
     # --- звук ---
@@ -544,18 +545,28 @@ def make_retainer():
     return m
 
 def disc_floor():
-    """Высота дна гнезда: на ней лежит пластинка."""
-    return Z_TOP + PLAT_T - P["disc_t"] - P["disc_sink"]
+    """Дно светящегося зазора вокруг столика."""
+    return Z_TOP + PLAT_T - 1.2
+
+def disc_seat():
+    """Верх столика: на нём лежит пластинка, выше края гнезда."""
+    return Z_TOP + PLAT_T + P["disc_lift"]
 
 def make_hub():
-    """Чёрный центр под пластинкой: пластинка лежит на нём, NFC читает сквозь него."""
-    return cyl(P["disc_d"] / 2 + 0.2, Z_TOP, disc_floor(), seg=96)
+    """Чёрный столик под пластинкой: меньше пластинки, она свисает за край — её легко взять снизу.
+    NFC читает сквозь столик."""
+    rp = P["disc_d"] / 2 - P["disc_over"]
+    m = cyl(rp, Z_TOP, disc_seat() - 0.6, seg=96) + cyl(rp, disc_seat() - 0.6, disc_seat(), r2=rp - 0.5, seg=96)
+    for k in range(1, 8):                                           # мелкие канавки, как на резиновом коврике
+        r = rp * k / 8
+        m -= cyl(r + 0.3, disc_seat() - 0.2, disc_seat() + 1, seg=96) - cyl(r - 0.3, disc_seat() - 1, disc_seat() + 2, seg=96)
+    return m
 
 def make_diffuser():
-    """Белое световое кольцо: светящийся зазор 3 мм вокруг пластинки (дно гнезда) и кольцо до диска.
+    """Белое световое кольцо: светящееся дно вокруг столика (под краем пластинки и в зазоре 3 мм) и кольцо до диска.
     Снизу полое: свет диодов идёт по каналу стакана и светит сквозь тонкий (0,8 мм) потолок."""
     zt, zf = Z_TOP + PLAT_T, disc_floor()
-    r0, rg, ro = P["disc_d"] / 2 + 0.35, P["disc_d"] / 2 + P["disc_gap"], 33.9
+    r0, rg, ro = P["disc_d"] / 2 - P["disc_over"] + 0.35, P["disc_d"] / 2 + P["disc_gap"], 33.9
     m = (cyl(ro, Z_TOP, zf, seg=128) - cyl(r0, Z_TOP - 1, zf + 1, seg=128)) + (cyl(ro, zf, zt, seg=128) - cyl(rg, zf - 1, zt + 1, seg=128))
     m -= cyl(ro - 0.6, Z_TOP - 1, zf - 0.8, seg=128) - cyl(r0 + 0.6, Z_TOP - 2, zf, seg=128)
     m -= cyl(ro - 0.6, Z_TOP - 1, zt - 0.8, seg=128) - cyl(rg + 0.6, Z_TOP - 2, zt, seg=128)
@@ -666,7 +677,7 @@ def ghosts():
     g = []
     cx, cy = C; y1 = WIN - 0.5
     pl, pw, ph = P["pn532"]
-    g.append(("e_disc", "NFC-пластинка", cyl(P["disc_d"] / 2, disc_floor(), disc_floor() + P["disc_t"], cx, cy, seg=96), (0, 0, 92)))
+    g.append(("e_disc", "NFC-пластинка", cyl(P["disc_d"] / 2, disc_seat(), disc_seat() + P["disc_t"], cx, cy, seg=96), (0, 0, 92)))
     g.append(("e_pn532", "PN532", box(cx - pl / 2, cy - pw / 2, Z_TOP - ph + 0.2, cx + pl / 2, cy + pw / 2, Z_TOP - 0.1), (0, 0, 62)))
     ring = cyl(P["ring_od"] / 2, 79.4, 79.4 + P["ring_pcb"]) + cyl(P["ring_od"] / 2 - 1, 81.0, 82.6)
     g.append(("e_ring", "Кольцо WS2812", (ring - cyl(P["ring_id"] / 2, 78, 84)).translate([cx, cy, DZ]), (0, 0, -30)))
@@ -717,7 +728,7 @@ def build():
         add(f"foot{i+1}", "Ножка-«булка»", "gold", foot.translate([sx * (HB - 6), sy * (HB - 6), Z_GND]), (0, 0, -92), None, "foot")
     add("cup", "Световой стакан", "white", make_cup().translate([cx, cy, DZ]), (0, 0, -18))
     add("retainer", "Прижим кольца", "white", make_retainer().translate([cx, cy, DZ]), (0, 0, -38))
-    add("hub", "Центр под пластинкой", "black", make_hub().translate([cx, cy, 0]), (0, 0, 50))
+    add("hub", "Столик под пластинкой", "black", make_hub().translate([cx, cy, 0]), (0, 0, 50))
     add("diffuser", "Световое кольцо гнезда", "white", make_diffuser().translate([cx, cy, 0]), (0, 0, 36))
     add("platter", "Диск-платтер", "black", make_platter().translate([cx, cy, 0]), (0, 0, 22))
     add("rim", "Латунный обод диска", "gold", make_rim().translate([cx, cy, 0]), (0, 0, 14))
