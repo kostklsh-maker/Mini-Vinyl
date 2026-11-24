@@ -24,8 +24,9 @@ P = dict(
     # --- пластинка и NFC ---
     disc_d=50.0, disc_t=0.8,  # NFC-пластинка: диаметр, толщина (0,6–0,8 мм)
     disc_gap=3.0,             # светящийся зазор вокруг пластинки в гнезде, на сторону
-    disc_lift=0.8,            # пластинка лежит на столике на столько выше края гнезда
-    disc_over=3.0,            # и свисает за столик на столько со всех сторон — за этот край её берут
+    disc_under=0.7,           # зазор под краем пластинки до светящегося дна
+    disc_over=3.0,            # пластинка свисает за столик на столько со всех сторон — за этот край её берут
+    pin_d=1.9, pin_h=6.0,     # штырёк по центру столика (отверстие в пластинке ≈ 2 мм) и его высота над столиком
     pn532=(43.0, 41.0, 4.5),  # плата PN532 V3: длина, ширина, высота с деталями
     ring_od=66.0, ring_id=52.0, ring_pcb=1.6,   # кольцо WS2812B на 24 диода
     # --- звук ---
@@ -546,21 +547,33 @@ def make_retainer():
 
 def disc_floor():
     """Дно светящегося зазора вокруг столика."""
-    return Z_TOP + PLAT_T - 1.2
+    return Z_TOP + PLAT_T - 1.5
 
 def disc_seat():
-    """Верх столика: на нём лежит пластинка, выше края гнезда."""
-    return Z_TOP + PLAT_T + P["disc_lift"]
+    """Верх столика: на нём лежит пластинка, на disc_under выше светящегося дна."""
+    return disc_floor() + P["disc_under"]
 
 def make_hub():
     """Чёрный столик под пластинкой: меньше пластинки, она свисает за край — её легко взять снизу.
     NFC читает сквозь столик."""
     rp = P["disc_d"] / 2 - P["disc_over"]
     m = cyl(rp, Z_TOP, disc_seat() - 0.6, seg=96) + cyl(rp, disc_seat() - 0.6, disc_seat(), r2=rp - 0.5, seg=96)
-    for k in range(1, 8):                                           # мелкие канавки, как на резиновом коврике
+    for k in range(2, 8):                                           # мелкие канавки, как на резиновом коврике
         r = rp * k / 8
         m -= cyl(r + 0.3, disc_seat() - 0.2, disc_seat() + 1, seg=96) - cyl(r - 0.3, disc_seat() - 1, disc_seat() + 2, seg=96)
+    zp, rpin = disc_seat(), P["pin_d"] / 2                          # штырёк, как у настоящего граммофона
+    m += cyl(rpin, zp - 0.5, zp + P["pin_h"] - 0.5, seg=24) + cyl(rpin, zp + P["pin_h"] - 0.5, zp + P["pin_h"], r2=rpin - 0.45, seg=24)
     return m
+
+def make_clamp():
+    """Латунный прижим-«грибок» на штырёк: прижимает пластинку, пока нет фигурки. Локально: низ на z = 0."""
+    rh = P["pin_d"] / 2 + 0.15
+    prof = [(0, 9.0), (1.2, 9.0), (1.8, 8.2), (3.0, 6.0), (5.0, 4.2), (6.2, 4.4), (7.2, 3.6), (8.0, 0.0)]
+    m = poly([(0.0, 0.0)] + [(r, z) for z, r in prof]).revolve(64)
+    for k in range(20):
+        a = 2 * math.pi * k / 20
+        m -= cyl(0.5, 0.3, 1.1, 9.0 * math.cos(a), 9.0 * math.sin(a), seg=8)
+    return m - cyl(rh, -1, 7.0, seg=24)
 
 def make_diffuser():
     """Белое световое кольцо: светящееся дно вокруг столика (под краем пластинки и в зазоре 3 мм) и кольцо до диска.
@@ -677,7 +690,7 @@ def ghosts():
     g = []
     cx, cy = C; y1 = WIN - 0.5
     pl, pw, ph = P["pn532"]
-    g.append(("e_disc", "NFC-пластинка", cyl(P["disc_d"] / 2, disc_seat(), disc_seat() + P["disc_t"], cx, cy, seg=96), (0, 0, 92)))
+    g.append(("e_disc", "NFC-пластинка", (cyl(P["disc_d"] / 2, disc_seat(), disc_seat() + P["disc_t"], cx, cy, seg=96) - cyl(1.05, disc_seat() - 1, disc_seat() + 2, cx, cy, seg=24)), (0, 0, 92)))
     g.append(("e_pn532", "PN532", box(cx - pl / 2, cy - pw / 2, Z_TOP - ph + 0.2, cx + pl / 2, cy + pw / 2, Z_TOP - 0.1), (0, 0, 62)))
     ring = cyl(P["ring_od"] / 2, 79.4, 79.4 + P["ring_pcb"]) + cyl(P["ring_od"] / 2 - 1, 81.0, 82.6)
     g.append(("e_ring", "Кольцо WS2812", (ring - cyl(P["ring_id"] / 2, 78, 84)).translate([cx, cy, DZ]), (0, 0, -30)))
@@ -732,6 +745,7 @@ def build():
     add("diffuser", "Световое кольцо гнезда", "white", make_diffuser().translate([cx, cy, 0]), (0, 0, 36))
     add("platter", "Диск-платтер", "black", make_platter().translate([cx, cy, 0]), (0, 0, 22))
     add("rim", "Латунный обод диска", "gold", make_rim().translate([cx, cy, 0]), (0, 0, 14))
+    add("clamp", "Прижим-«грибок» на штырёк", "gold", make_clamp().translate([cx, cy, disc_seat() + P["disc_t"]]), (0, 0, 112))
     # ручка громкости с подсветкой на лице
     add("enc_holder", "Держатель ручки", "white", xf(make_enc_holder(), [(-1, 0, 0), (0, 0, 1), (0, 1, 0)], (0, -HB, ENC_Z)), (0, 30, 0), None, "enc_holder")
     FRONT = [(1, 0, 0), (0, 0, 1), (0, -1, 0)]
@@ -783,7 +797,7 @@ LOCAL = dict(column=make_column, enc_cap=make_enc_cap,
              gear1=lambda: make_gear(10.0, 16), gear2=lambda: make_gear(7.5, 12),
              tank=make_tank, gauge=make_gauge, gauge_face=make_gauge_face, pipes=make_pipes,
              socket=make_bulb_socket, bulb=lambda: make_bulb().translate([0, 0, 2.0]), soundbox=make_soundbox,
-             rim=lambda: make_rim(),
+             rim=lambda: make_rim(), clamp=make_clamp,
              enc_holder=lambda: make_enc_holder().rotate([180, 0, 0]),
              esp_cap=lambda: make_esp_cap().rotate([180, 0, 0]),
              sd_clamp=lambda: make_sd_clamp().rotate([180, 0, 0]),
@@ -854,7 +868,7 @@ PLATES = [
     ("1_korpus_brown", ["body"]),
     ("2_osnovanie_brown", ["base"]),
     ("3_truba_gold", ["bell", "riser", "elbow", "arm", "soundbox"]),
-    ("4_dekor_gold", ["rim", "panel", "grille", "grille", "gear1", "gear2", "tank", "gauge", "socket", "socket", "socket",
+    ("4_dekor_gold", ["rim", "clamp", "panel", "grille", "grille", "gear1", "gear2", "tank", "gauge", "socket", "socket", "socket",
                       "column", "column", "column", "column", "foot", "foot", "foot", "foot"]),
     ("5_disk_black", ["platter", "hub", "exc_cage", "esp_cap", "esp_cap", "amp_clamp", "dac_clamp", "sd_clamp"]),
     ("6_svet_white", ["cup", "retainer", "diffuser", "enc_holder", "enc_cap", "dial", "gauge_face"]),
